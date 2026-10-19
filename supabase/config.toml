@@ -1,0 +1,9 @@
+project_id = "wizoolakyttjrahpbgec"
+
+# A Meta chama o webhook sem login do Supabase; quem protege e a assinatura
+# X-Hub-Signature-256 conferida dentro da funcao.
+[functions.meta-webhook]
+verify_jwt = false
+
+[functions.whatsapp-send]
+verify_jwt = true

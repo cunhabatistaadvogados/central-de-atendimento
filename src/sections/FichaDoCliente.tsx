@@ -1,0 +1,228 @@
+import type { Etapa } from '@motor/robo'
+import { dinheiro, ehIdoso, rendaPorPessoa, SALARIO_MINIMO } from '@motor/robo'
+import { AlarmClock, Bot, CalendarCheck2, Check, CheckCircle2, Circle, FileSignature, MessagesSquare, Smartphone, X } from 'lucide-react'
+import { useState } from 'react'
+import { Avatar, ChipEtapa, ChipOrigem, PainelLateral } from '@/components/ui'
+import { ETAPAS } from '@/lib/escritorio'
+import { dataHora, haQuanto } from '@/lib/formato'
+import { useDados } from '@/lib/store'
+import type { Cliente, Documentos } from '@/lib/tipos'
+import { Bolhas } from './Conversas'
+import EditorDeContrato from './EditorDeContrato'
+
+type AbaFicha = 'resumo' | 'conversa' | 'contrato' | 'historico'
+
+function Linha({ rotulo, valor, alerta }: { rotulo: string; valor?: string; alerta?: boolean }) {
+  return (
+    <div className="rounded-2xl bg-white px-3.5 py-2.5">
+      <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-400">{rotulo}</p>
+      <p className={`mt-0.5 text-sm font-bold ${valor ? (alerta ? 'text-orange-700' : 'text-marinho-900') : 'text-slate-300'}`}>{valor || 'ainda não contou'}</p>
+    </div>
+  )
+}
+
+const DOCS: [keyof Documentos, string][] = [
+  ['rg', 'RG (frente e verso)'],
+  ['cpf', 'CPF'],
+  ['comprovante', 'Comprovante de endereço'],
+  ['cadunico', 'CadÚnico'],
+  ['laudo', 'Laudo médico'],
+]
+
+function Resumo({ c, autor }: { c: Cliente; autor: string }) {
+  const { documentos, resolverPendencia, confirmarReuniao } = useDados()
+  const f = c.robo.ficha
+  const rpp = rendaPorPessoa(f)
+  const [data, setData] = useState('')
+  const para = f.para === 'proprio' ? 'O(a) próprio(a)' : f.para === 'filho' ? 'Filho' : f.para === 'filha' ? 'Filha' : f.quem ? f.quem.replace(/^su[ao] /, '').replace(/^./, (x) => x.toUpperCase()) : undefined
+
+  const caminho = [
+    { nome: 'Qualificação pelo robô', ok: ['qualificado', 'reuniao', 'contrato', 'contratado'].includes(c.etapa) },
+    { nome: 'Reunião com o advogado', ok: Boolean(c.reuniao?.confirmada) },
+    { nome: 'Documentos recebidos', ok: Object.values(c.documentos).filter(Boolean).length >= 4 },
+    { nome: 'Contrato enviado', ok: c.contrato?.status === 'enviado' || c.contrato?.status === 'assinado' },
+    { nome: 'Contrato assinado', ok: c.contrato?.status === 'assinado' },
+  ]
+
+  return (
+    <div className="space-y-5">
+      <section className="cartao p-5">
+        <p className="rotulo mb-4 text-ouro-600">Caminho até o contrato</p>
+        <ol className="flex flex-wrap items-center gap-2">
+          {caminho.map((p, i) => (
+            <li key={p.nome} className="flex items-center gap-2">
+              <span className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold ${p.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+                {p.ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Circle className="h-3.5 w-3.5" />}
+                {p.nome}
+              </span>
+              {i < caminho.length - 1 && <span className="h-px w-3 bg-slate-200" />}
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section>
+        <p className="rotulo mb-2 px-1 text-ouro-600">O que a família contou ao robô</p>
+        <div className="grid gap-2 rounded-[22px] bg-ouro-50/60 p-2 sm:grid-cols-2 lg:grid-cols-3">
+          <Linha rotulo="Benefício para" valor={para && `${para}${f.idade !== undefined ? `, ${f.idade} anos` : ''}`} />
+          <Linha rotulo="Diagnóstico" valor={ehIdoso(f) ? 'Idoso 65+ (sem laudo)' : f.diagnostico} />
+          <Linha rotulo="Laudo" valor={f.laudo === 'recente' ? 'Tem, recente' : f.laudo === 'antigo' ? 'Antigo (mais de 1 ano)' : f.laudo === 'sem' ? 'Não tem' : undefined} alerta={f.laudo !== 'recente'} />
+          <Linha rotulo="Fase médica parceira" valor={f.faseMedica === 'aceitou' ? 'Aceitou' : f.faseMedica === 'recusou' ? 'Recusou por agora' : undefined} />
+          <Linha rotulo="Rotina" valor={f.rotina} />
+          <Linha rotulo="Tratamento" valor={f.tratamentoTexto} />
+          <Linha rotulo="CadÚnico" valor={f.cadunico === 'atualizado' ? 'Atualizado' : f.cadunico === 'desatualizado' ? 'Precisa atualizar' : f.cadunico === 'nao' ? 'Não tem' : undefined} alerta={f.cadunico !== 'atualizado'} />
+          <Linha rotulo="Casa" valor={f.pessoasCasa !== undefined ? `${f.pessoasCasa} pessoa(s)` : undefined} />
+          <Linha
+            rotulo="Renda por pessoa"
+            valor={rpp !== undefined ? `${dinheiro(rpp)} (${Math.round((rpp / SALARIO_MINIMO) * 100)}% do mínimo)` : f.rendaCasa !== undefined ? `Casa: ${dinheiro(f.rendaCasa)}` : undefined}
+            alerta={rpp !== undefined && rpp > SALARIO_MINIMO / 4}
+          />
+          <Linha rotulo="Outros benefícios na casa" valor={f.outrosBeneficios === 'sim' ? `Sim${f.outrosBeneficiosTexto ? ` (${f.outrosBeneficiosTexto})` : ''}` : f.outrosBeneficios === 'nao' ? 'Não' : undefined} />
+          <Linha rotulo="Pedido anterior no INSS" valor={f.pedidoAnterior === 'negado' ? `Negado${f.tempoNegado ? `, ${f.tempoNegado}` : ''}` : f.pedidoAnterior === 'em_analise' ? 'Em análise' : f.pedidoAnterior === 'nao' ? 'Nunca pediu' : undefined} />
+          <Linha rotulo="Cidade" valor={f.cidade ?? c.cidade} />
+        </div>
+        <p className="mt-2 px-1 text-[11px] text-slate-400">Regra geral: até 1/4 do salário mínimo por pessoa. Acima disso há exceções que só o advogado avalia; o robô nunca dá veredito.</p>
+      </section>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <section className="cartao p-5">
+          <p className="rotulo mb-3 text-ouro-600">Documentos</p>
+          <div className="space-y-1.5">
+            {DOCS.map(([k, nome]) => (
+              <label key={k} className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 hover:bg-ouro-50/60">
+                <input type="checkbox" checked={c.documentos[k]} onChange={(e) => documentos(c.id, { ...c.documentos, [k]: e.target.checked })} className="h-4 w-4 accent-marinho-800" />
+                <span className={`text-sm ${c.documentos[k] ? 'font-bold text-marinho-900' : 'text-slate-500'}`}>{nome}</span>
+                {k === 'laudo' && f.laudo !== 'recente' && <span className="ml-auto text-[10px] font-bold text-orange-600">fase médica</span>}
+              </label>
+            ))}
+          </div>
+        </section>
+
+        <section className="cartao p-5">
+          <p className="rotulo mb-3 text-ouro-600">Reunião e retornos</p>
+          {c.reuniao ? (
+            <div className={`rounded-2xl p-3.5 ${c.reuniao.confirmada ? 'bg-emerald-50' : 'bg-orange-50'}`}>
+              <p className="flex items-center gap-2 text-sm font-bold">
+                <CalendarCheck2 className={`h-4 w-4 ${c.reuniao.confirmada ? 'text-emerald-600' : 'text-orange-600'}`} />
+                {c.reuniao.confirmada && c.reuniao.data ? dataHora(c.reuniao.data) : `Pedido: ${c.reuniao.quando}`} · {c.reuniao.advogado}
+              </p>
+              {!c.reuniao.confirmada && (
+                <div className="mt-3 flex gap-2">
+                  <input type="datetime-local" value={data} onChange={(e) => setData(e.target.value)} className="campo py-2" />
+                  <button type="button" disabled={!data} onClick={() => confirmarReuniao(c.id, new Date(data).toISOString(), autor)} className="botao-primario shrink-0 py-2">
+                    Confirmar
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="rounded-2xl bg-slate-50 px-3.5 py-3 text-xs text-slate-400">Sem reunião ainda. O robô oferece dois horários quando a qualificação termina.</p>
+          )}
+          <div className="mt-3 space-y-2">
+            {c.pendencias.length === 0 && <p className="text-xs text-slate-400">Nenhum retorno agendado.</p>}
+            {c.pendencias.map((p) => {
+              const vencida = !p.resolvida && new Date(p.retornoEm) <= new Date()
+              return (
+                <div key={p.id} className={`flex items-center gap-3 rounded-xl border px-3 py-2 ${p.resolvida ? 'border-slate-100 opacity-50' : vencida ? 'border-orange-200 bg-orange-50' : 'border-marinho-900/[0.07]'}`}>
+                  <AlarmClock className={`h-4 w-4 shrink-0 ${vencida ? 'text-orange-600' : 'text-slate-400'}`} />
+                  <span className="min-w-0 flex-1">
+                    <span className={`block text-xs font-bold ${p.resolvida ? 'line-through' : ''}`}>{p.texto}</span>
+                    <span className="block text-[10px] text-slate-400">retorno do robô {vencida ? `vencido ${haQuanto(p.retornoEm)}` : `em ${dataHora(p.retornoEm)}`}</span>
+                  </span>
+                  {!p.resolvida && (
+                    <button type="button" onClick={() => resolverPendencia(c.id, p.id)} className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50" title="Resolvida" aria-label="Marcar como resolvida">
+                      <Check className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      </div>
+    </div>
+  )
+}
+
+export default function FichaDoCliente({ id, abaInicial, onFechar, abrirConversa, autor }: { id: string; abaInicial?: AbaFicha; onFechar: () => void; abrirConversa: (id: string) => void; autor: string }) {
+  const { cliente, moverEtapa, atualizarCliente } = useDados()
+  const c = cliente(id)
+  const [aba, setAba] = useState<AbaFicha>(abaInicial ?? 'resumo')
+  if (!c) return null
+
+  return (
+    <PainelLateral aberto onFechar={onFechar}>
+      <header className="relative overflow-hidden bg-marinho-900 px-5 pb-0 pt-5 text-white sm:px-7">
+        <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-ouro-500/15 blur-3xl" />
+        <div className="relative flex items-start gap-4">
+          <Avatar nome={c.nome || c.telefone} tamanho="h-14 w-14 text-base" />
+          <div className="min-w-0 flex-1">
+            <input
+              value={c.nome}
+              onChange={(e) => atualizarCliente(c.id, { nome: e.target.value })}
+              placeholder="Nome do cliente"
+              className="titulo-serif w-full rounded-lg bg-transparent text-[28px] leading-tight text-white outline-none placeholder:text-white/30 focus:bg-white/5"
+            />
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-white/55">
+              <Smartphone className="h-3.5 w-3.5" /> {c.telefone} <ChipOrigem origem={c.origem} /> · chegou {haQuanto(c.criadoEm)}
+            </p>
+          </div>
+          <button type="button" onClick={onFechar} aria-label="Fechar ficha" className="rounded-xl p-2 text-white/60 hover:bg-white/10">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="relative mt-4 flex flex-wrap items-center gap-2">
+          <ChipEtapa etapa={c.etapa} />
+          <select value={c.etapa} onChange={(e) => moverEtapa(c.id, e.target.value as Etapa, autor)} className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-bold text-white outline-none">
+            {ETAPAS.map((e) => (
+              <option key={e.chave} value={e.chave} className="text-marinho-900">
+                Mover para: {e.nome}
+              </option>
+            ))}
+          </select>
+          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${c.robo.pausado ? 'bg-ouro-500/20 text-ouro-200' : 'bg-emerald-500/20 text-emerald-200'}`}>
+            <Bot className="h-3 w-3" /> {c.robo.pausado ? 'equipe no comando' : 'robô atendendo'}
+          </span>
+          <button type="button" onClick={() => abrirConversa(c.id)} className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-ouro-500 px-3 py-1.5 text-[11px] font-extrabold text-marinho-950 hover:bg-ouro-400">
+            <MessagesSquare className="h-3.5 w-3.5" /> Responder no WhatsApp
+          </button>
+        </div>
+        <nav className="relative mt-5 flex gap-1">
+          {(
+            [
+              ['resumo', 'Resumo'],
+              ['conversa', 'Conversa'],
+              ['contrato', 'Contrato'],
+              ['historico', 'Histórico'],
+            ] as [AbaFicha, string][]
+          ).map(([k, n]) => (
+            <button key={k} type="button" onClick={() => setAba(k)} className={`rounded-t-xl px-4 py-2.5 text-xs font-bold transition ${aba === k ? 'bg-papel text-marinho-900' : 'text-white/55 hover:text-white'}`}>
+              {k === 'contrato' && <FileSignature className="mr-1 inline h-3.5 w-3.5" />}
+              {n}
+            </button>
+          ))}
+        </nav>
+      </header>
+      <div className="rolagem-fina flex-1 overflow-y-auto p-5 sm:p-7">
+        {aba === 'resumo' && <Resumo c={c} autor={autor} />}
+        {aba === 'conversa' && (
+          <div className="papel-whatsapp space-y-2 rounded-[22px] p-4">
+            <Bolhas mensagens={c.mensagens} />
+          </div>
+        )}
+        {aba === 'contrato' && <EditorDeContrato cliente={c} />}
+        {aba === 'historico' && (
+          <ol className="relative space-y-4 border-l-2 border-ouro-200 pl-6">
+            {[...c.eventos].reverse().map((e) => (
+              <li key={e.id} className="relative">
+                <span className={`absolute -left-[31px] top-1 h-3.5 w-3.5 rounded-full border-2 border-papel ${e.tipo === 'robo' ? 'bg-marinho-600' : e.tipo === 'contrato' ? 'bg-ouro-500' : e.tipo === 'etapa' ? 'bg-violet-500' : 'bg-emerald-500'}`} />
+                <p className="text-sm font-semibold text-marinho-900">{e.texto}</p>
+                <p className="text-[11px] text-slate-400">{dataHora(e.em)}</p>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+    </PainelLateral>
+  )
+}
