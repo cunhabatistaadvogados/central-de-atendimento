@@ -7,12 +7,10 @@ import {
   FileSignature,
   LogOut,
   MessagesSquare,
-  MoreHorizontal,
   Settings2,
   ShieldCheck,
   Sparkles,
   UsersRound,
-  X,
 } from 'lucide-react'
 import { useCallback, useMemo, useState, type ComponentType } from 'react'
 import type { Sessao } from '@/App'
@@ -35,15 +33,15 @@ import VisaoGeral from '@/sections/VisaoGeral'
 export type Aba = 'visao' | 'conversas' | 'funil' | 'clientes' | 'contratos' | 'agenda' | 'robo' | 'ajustes'
 type Icone = ComponentType<{ className?: string; strokeWidth?: number }>
 
-const ABAS: { chave: Aba; nome: string; icone: Icone }[] = [
-  { chave: 'visao', nome: 'Visão geral', icone: ChartNoAxesCombined },
-  { chave: 'conversas', nome: 'Conversas', icone: MessagesSquare },
-  { chave: 'funil', nome: 'Funil BPC/LOAS', icone: Columns3 },
-  { chave: 'clientes', nome: 'Clientes', icone: UsersRound },
-  { chave: 'contratos', nome: 'Contratos', icone: FileSignature },
-  { chave: 'agenda', nome: 'Agenda', icone: CalendarDays },
-  { chave: 'robo', nome: 'Testar o robô', icone: Bot },
-  { chave: 'ajustes', nome: 'Preferências', icone: Settings2 },
+const ABAS: { chave: Aba; nome: string; curto: string; icone: Icone }[] = [
+  { chave: 'visao', nome: 'Visão geral', curto: 'Visão', icone: ChartNoAxesCombined },
+  { chave: 'conversas', nome: 'Conversas', curto: 'Conversas', icone: MessagesSquare },
+  { chave: 'funil', nome: 'Funil BPC/LOAS', curto: 'Funil', icone: Columns3 },
+  { chave: 'clientes', nome: 'Clientes', curto: 'Clientes', icone: UsersRound },
+  { chave: 'contratos', nome: 'Contratos', curto: 'Contratos', icone: FileSignature },
+  { chave: 'agenda', nome: 'Agenda', curto: 'Agenda', icone: CalendarDays },
+  { chave: 'robo', nome: 'Testar o robô', curto: 'Robô', icone: Bot },
+  { chave: 'ajustes', nome: 'Preferências', curto: 'Ajustes', icone: Settings2 },
 ]
 
 const META: Record<Aba, { olho: string; titulo: string; sub: string }> = {
@@ -65,7 +63,6 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
   const [aba, setAba] = useState<Aba>('visao')
   const [fichaAberta, setFichaAberta] = useState<{ id: string; aba?: 'resumo' | 'conversa' | 'contrato' | 'historico' } | null>(null)
   const [conversaFoco, setConversaFoco] = useState<string | null>(null)
-  const [maisAberto, setMaisAberto] = useState(false)
 
   const abrirCliente = useCallback((id: string, abaDaFicha?: 'resumo' | 'conversa' | 'contrato' | 'historico') => setFichaAberta({ id, aba: abaDaFicha }), [])
   const abrirConversa = useCallback((id: string) => {
@@ -86,7 +83,6 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
   const meta = META[aba]
   const irPara = (a: Aba) => {
     setAba(a)
-    setMaisAberto(false)
     // A ficha abre colada no menu: clicar no menu troca de tela e fecha a ficha.
     setFichaAberta(null)
     window.scrollTo({ top: 0 })
@@ -233,58 +229,38 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
         </div>
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-marinho-900/10 bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),8px)] pt-2 backdrop-blur-xl lg:hidden" aria-label="Navegação">
-        <div className="mx-auto grid max-w-lg grid-cols-5">
-          {(['visao', 'conversas', 'funil', 'contratos'] as Aba[]).map((chave) => {
-            const item = ABAS.find((a) => a.chave === chave)!
-            const Icone = item.icone
-            const ativo = aba === chave
-            const n = chave === 'conversas' ? contagens.conversas : chave === 'contratos' ? contagens.contratos : 0
-            return (
-              <button key={chave} type="button" onClick={() => irPara(chave)} className={`relative flex flex-col items-center gap-1 rounded-xl py-1.5 text-[10px] font-bold ${ativo ? 'text-marinho-900' : 'text-slate-400'}`}>
-                <span className={`flex h-8 w-12 items-center justify-center rounded-full ${ativo ? 'bg-ouro-100 text-ouro-700' : ''}`}>
-                  <Icone className="h-5 w-5" />
-                </span>
-                {item.nome.split(' ')[0]}
-                {n > 0 && <span className="absolute right-3 top-0 min-w-4 rounded-full bg-ouro-500 px-1 text-[9px] text-marinho-950">{n}</span>}
-              </button>
-            )
-          })}
-          <button type="button" onClick={() => setMaisAberto(true)} className={`flex flex-col items-center gap-1 rounded-xl py-1.5 text-[10px] font-bold ${['clientes', 'agenda', 'robo', 'ajustes'].includes(aba) ? 'text-marinho-900' : 'text-slate-400'}`}>
-            <span className="flex h-8 w-12 items-center justify-center rounded-full">
-              <MoreHorizontal className="h-5 w-5" />
-            </span>
-            Mais
-          </button>
-        </div>
+      {/* Barra do celular flutuante, igual a do sistema do Marcello (pedido do
+          Edu em 19/10/2026): todos os itens sempre a vista, sem menu "Mais",
+          presa no rodape enquanto a pagina rola por baixo. */}
+      <nav
+        className="fixed inset-x-3 bottom-3 z-40 flex rounded-[22px] border border-marinho-900/10 bg-white/95 px-1.5 py-1.5 shadow-[0_18px_55px_rgba(11,31,56,.22)] backdrop-blur-xl lg:hidden"
+        style={{ paddingBottom: 'max(.375rem, env(safe-area-inset-bottom))' }}
+        aria-label="Navegação móvel"
+      >
+        {ABAS.map((item) => {
+          const Icone = item.icone
+          const ativo = aba === item.chave
+          const n = item.chave === 'conversas' ? contagens.conversas : item.chave === 'contratos' ? contagens.contratos : item.chave === 'agenda' ? contagens.agenda : 0
+          return (
+            <button
+              key={item.chave}
+              type="button"
+              onClick={() => irPara(item.chave)}
+              aria-current={ativo ? 'page' : undefined}
+              aria-label={item.nome}
+              className={`relative flex min-w-0 flex-1 flex-col items-center gap-1 rounded-[17px] px-0.5 py-2.5 text-[9px] font-bold transition-colors ${
+                ativo ? 'bg-marinho-800 text-white' : 'text-slate-400'
+              }`}
+            >
+              <Icone className={`h-[18px] w-[18px] ${ativo ? 'text-ouro-400' : ''}`} strokeWidth={2} />
+              <span className="max-w-full truncate">{item.curto}</span>
+              {n > 0 && !ativo && (
+                <span className={`absolute right-[22%] top-1.5 h-2 w-2 rounded-full ring-2 ring-white ${item.chave === 'agenda' ? 'bg-orange-500' : 'bg-ouro-500'}`} />
+              )}
+            </button>
+          )
+        })}
       </nav>
-
-      {maisAberto && (
-        <div className="fixed inset-0 z-50 flex items-end lg:hidden">
-          <button type="button" aria-label="Fechar" className="absolute inset-0 bg-marinho-950/40" onClick={() => setMaisAberto(false)} />
-          <div className="entrar relative w-full rounded-t-[26px] bg-white p-5 pb-8">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="titulo-serif text-xl">Mais</p>
-              <button type="button" onClick={() => setMaisAberto(false)} className="rounded-xl p-2 text-slate-400" aria-label="Fechar">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            {(['clientes', 'agenda', 'robo', 'ajustes'] as Aba[]).map((chave) => {
-              const item = ABAS.find((a) => a.chave === chave)!
-              const Icone = item.icone
-              return (
-                <button key={chave} type="button" onClick={() => irPara(chave)} className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold text-marinho-900 hover:bg-ouro-50">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-ouro-50 text-ouro-700">
-                    <Icone className="h-[18px] w-[18px]" />
-                  </span>
-                  {item.nome}
-                  <ChevronRight className="ml-auto h-4 w-4 text-slate-300" />
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
 
       {fichaAberta && (
         <FichaDoCliente

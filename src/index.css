@@ -6,6 +6,23 @@
   html {
     background: #f7f5f0;
   }
+  /* A pagina nunca anda para o lado no celular (pedido do Edu, 19/10/2026).
+     clip corta sem criar area de rolagem, entao o cabecalho sticky segue
+     funcionando; o funil continua rolando para o lado DENTRO do quadro dele. */
+  html,
+  body {
+    overflow-x: clip;
+    overscroll-behavior-x: none;
+  }
+  /* Campo com letra menor que 16px faz o iPhone dar zoom ao tocar, e com o
+     zoom a tela fica solta para os lados. */
+  @media (max-width: 640px) {
+    input,
+    textarea,
+    select {
+      font-size: 16px !important;
+    }
+  }
   body {
     @apply bg-papel font-sans text-marinho-900 antialiased;
     min-width: 320px;
