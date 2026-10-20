@@ -14,6 +14,13 @@
     overflow-x: clip;
     overscroll-behavior-x: none;
   }
+  /* Item de grade nao cresce alem da coluna. Sem isto, um texto longo com
+     truncate (ex.: "Falha no envio: (#133010)...") empurrava o cartao para
+     483px numa tela de 360 e cortava tudo na direita (print do Edu,
+     19/10/2026). */
+  .grid > * {
+    min-width: 0;
+  }
   /* Campo com letra menor que 16px faz o iPhone dar zoom ao tocar, e com o
      zoom a tela fica solta para os lados. */
   @media (max-width: 640px) {
@@ -92,6 +99,12 @@
   .rolagem-fina::-webkit-scrollbar-thumb {
     background: rgba(11, 31, 56, 0.16);
     border-radius: 999px;
+  }
+  .sem-barra {
+    scrollbar-width: none;
+  }
+  .sem-barra::-webkit-scrollbar {
+    display: none;
   }
   .grade-suave {
     background-image:

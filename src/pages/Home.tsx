@@ -12,7 +12,7 @@ import {
   Sparkles,
   UsersRound,
 } from 'lucide-react'
-import { useCallback, useMemo, useState, type ComponentType } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react'
 import type { Sessao } from '@/App'
 import { ArteDoMenu, MarcaHorizontal, SeloCB } from '@/components/Marca'
 import { esperandoEquipe } from '@/lib/atendimento'
@@ -70,6 +70,14 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
     setConversaFoco(id)
     setAba('conversas')
   }, [])
+
+  const barraCelular = useRef<HTMLDivElement>(null)
+  const [barraNoFim, setBarraNoFim] = useState(false)
+  // Item ativo sempre a vista na barra do celular, mesmo depois de rolar.
+  useEffect(() => {
+    const botao = barraCelular.current?.querySelector<HTMLElement>(`[data-aba="${aba}"]`)
+    botao?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' })
+  }, [aba])
 
   const contagens = useMemo(() => {
     const hoje = new Date()
@@ -248,33 +256,47 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
           Edu em 19/10/2026): todos os itens sempre a vista, sem menu "Mais",
           presa no rodape enquanto a pagina rola por baixo. */}
       <nav
-        className="fixed inset-x-3 bottom-3 z-40 flex rounded-[22px] border border-marinho-900/10 bg-white/95 px-1.5 py-1.5 shadow-[0_18px_55px_rgba(11,31,56,.22)] backdrop-blur-xl lg:hidden"
-        style={{ paddingBottom: 'max(.375rem, env(safe-area-inset-bottom))' }}
+        className="fixed inset-x-3 bottom-3 z-40 overflow-hidden rounded-[22px] border border-marinho-900/10 bg-white/95 shadow-[0_18px_55px_rgba(11,31,56,.22)] backdrop-blur-xl lg:hidden"
         aria-label="Navegação móvel"
       >
-        {ABAS.map((item) => {
-          const Icone = item.icone
-          const ativo = aba === item.chave
-          const n = item.chave === 'conversas' ? contagens.conversas : item.chave === 'contratos' ? contagens.contratos : item.chave === 'agenda' ? contagens.agenda : 0
-          return (
-            <button
-              key={item.chave}
-              type="button"
-              onClick={() => irPara(item.chave)}
-              aria-current={ativo ? 'page' : undefined}
-              aria-label={item.nome}
-              className={`relative flex min-w-0 flex-1 flex-col items-center gap-1 rounded-[17px] px-0.5 py-2.5 text-[9px] font-bold transition-colors ${
-                ativo ? 'bg-marinho-800 text-white' : 'text-slate-400'
-              }`}
-            >
-              <Icone className={`h-[18px] w-[18px] ${ativo ? 'text-ouro-400' : ''}`} strokeWidth={2} />
-              <span className="max-w-full truncate">{item.curto}</span>
-              {n > 0 && !ativo && (
-                <span className={`absolute right-[22%] top-1.5 h-2 w-2 rounded-full ring-2 ring-white ${item.chave === 'agenda' ? 'bg-orange-500' : 'bg-ouro-500'}`} />
-              )}
-            </button>
-          )
-        })}
+        {/* Com 8 itens a barra espremia os nomes ("Conve...", print do Edu de
+            19/10/2026). Agora cada botao tem largura fixa e a faixa rola para
+            o lado; a sombra na borda mostra que tem mais. */}
+        <div
+          ref={barraCelular}
+          onScroll={(e) => {
+            const f = e.currentTarget
+            setBarraNoFim(f.scrollLeft + f.clientWidth >= f.scrollWidth - 4)
+          }}
+          className="sem-barra flex snap-x gap-0.5 overflow-x-auto overscroll-x-contain px-1.5 py-1.5"
+          style={{ paddingBottom: 'max(.375rem, env(safe-area-inset-bottom))' }}
+        >
+          {ABAS.map((item) => {
+            const Icone = item.icone
+            const ativo = aba === item.chave
+            const n = item.chave === 'conversas' ? contagens.conversas : item.chave === 'contratos' ? contagens.contratos : item.chave === 'agenda' ? contagens.agenda : 0
+            return (
+              <button
+                key={item.chave}
+                type="button"
+                data-aba={item.chave}
+                onClick={() => irPara(item.chave)}
+                aria-current={ativo ? 'page' : undefined}
+                aria-label={item.nome}
+                className={`relative flex w-[66px] shrink-0 snap-start flex-col items-center gap-1 rounded-[17px] py-2.5 text-[10px] font-bold transition-colors ${
+                  ativo ? 'bg-marinho-800 text-white' : 'text-slate-500'
+                }`}
+              >
+                <Icone className={`h-5 w-5 ${ativo ? 'text-ouro-400' : ''}`} strokeWidth={2} />
+                <span className="whitespace-nowrap">{item.curto}</span>
+                {n > 0 && !ativo && (
+                  <span className={`absolute right-3 top-1.5 h-2 w-2 rounded-full ring-2 ring-white ${item.chave === 'agenda' ? 'bg-orange-500' : 'bg-ouro-500'}`} />
+                )}
+              </button>
+            )
+          })}
+        </div>
+        {!barraNoFim && <span className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-white/95 to-transparent" />}
       </nav>
 
       {fichaAberta && (
