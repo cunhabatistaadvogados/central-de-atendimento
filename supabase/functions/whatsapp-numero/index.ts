@@ -49,7 +49,8 @@ Deno.serve(async (req) => {
   if (!/^\d{6,}$/.test(telefone) || !/^\d{6,}$/.test(conta)) return json({ error: 'telefone_id e conta_id são obrigatórios.' }, 400)
 
   if (corpo.acao === 'status') {
-    const numero = await meta('GET', `${telefone}?fields=display_phone_number,verified_name,name_status,status,code_verification_status,quality_rating,platform_type,throughput`)
+    // health_status diz por que o numero nao envia (pagamento, nome, registro).
+    const numero = await meta('GET', `${telefone}?fields=display_phone_number,verified_name,name_status,status,code_verification_status,quality_rating,platform_type,throughput,account_mode,last_onboarded_time,health_status`)
     const apps = await meta('GET', `${conta}/subscribed_apps`)
     return json({ numero, apps })
   }

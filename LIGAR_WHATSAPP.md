@@ -1,16 +1,35 @@
 # Ligar o WhatsApp do robô (Cunha Batista)
 
-Estado em 19/10/2026. Tudo está na conta da Meta do Edu, no portfólio
+Estado em 20/10/2026. Tudo está na conta da Meta do Edu, no portfólio
 **Cunha Batista Advogados Associados** (id 1002397125452791).
 
-## Já feito
+## Número real (20/10/2026)
+
+O 13 99741-4361 era o número do Pixel Hub. Depois que eles apagaram lá, o
+cadastro por SMS criou uma conta do WhatsApp **nova** no portfólio:
+
+| Item | Valor |
+|---|---|
+| Conta WhatsApp Business do robô | 1355454649817117 |
+| Número do robô | +55 (13) 99741-4361, id do número 1386403061224928, nome "Cunha Batista Advogados Associados" aprovado |
+| Webhooks | app Central Cunha Batista assinado nessa conta (`subscribed_apps`) |
+| Supabase | segredo `WHATSAPP_PHONE_NUMBER_ID` = 1386403061224928 (trocar pelo menu da linha > Edit secret; o formulário "Add or replace" não sobrescreveu) |
+| Registro na Cloud API | feito com o PIN de duas etapas, que fica só com o Edu |
+
+Conferir ou refazer: `python scripts/numero_whatsapp.py status` (ou `assinar`,
+`registrar`). Usa a função `whatsapp-numero` e a chave service_role do `.env.local`.
+
+O modelo `retorno_pendencia` foi criado na conta antiga (1846254099819287):
+modelo é por conta, então precisa ser criado de novo na 1355454649817117 antes
+de usar retornos automáticos.
+
+## Histórico (19/10/2026)
 
 | Item | Valor |
 |---|---|
 | App da Meta | Central Cunha Batista, id 1439216688176078 |
-| Conta WhatsApp Business | 1846254099819287 |
+| Conta WhatsApp Business (só o número de teste) | 1846254099819287 |
 | Número de teste da Meta | +1 555 656 4019, id do número 1316032894934489 |
-| Número do robô | +55 (13) 99741-4361, preenchido em "Adicionar telefone", falta o código do chip |
 | Usuário do sistema | robo-atendimento (admin), com controle total do app e da conta WhatsApp |
 | Modelo de mensagem | `retorno_pendencia` (Utilidade, pt_BR), em análise na Meta |
 | Supabase | tabelas criadas; `whatsapp-send` (com login) e `meta-webhook` (sem login, protegida pela assinatura da Meta) publicadas e testadas |
