@@ -17,6 +17,8 @@ Estado em 19/10/2026. Tudo está na conta da Meta do Edu, no portfólio
 | Segredos | os 5 cadastrados no Supabase (conferidos pelos nomes) |
 | Webhook | URL verificada pela Meta e campo `messages` assinado |
 | Teste de ponta a ponta | mensagem de teste da Meta gravada, robô respondeu certo; envio recusado com (#133010) Account not registered: o número de teste não está ativado para envio. Resolve com o número real. |
+| Páginas legais | política de privacidade e exclusão de dados no ar no site e linkadas no app (texto aguardando revisão do Lucas) |
+| App da Meta | **publicado** em 19/10/2026 (categoria Negócios e Páginas) |
 
 ## Falta (precisa de você: são segredos, senhas e o chip)
 
