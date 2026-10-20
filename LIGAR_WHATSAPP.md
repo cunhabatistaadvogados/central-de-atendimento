@@ -14,6 +14,9 @@ Estado em 19/10/2026. Tudo está na conta da Meta do Edu, no portfólio
 | Usuário do sistema | robo-atendimento (admin), com controle total do app e da conta WhatsApp |
 | Modelo de mensagem | `retorno_pendencia` (Utilidade, pt_BR), em análise na Meta |
 | Supabase | tabelas criadas; `whatsapp-send` (com login) e `meta-webhook` (sem login, protegida pela assinatura da Meta) publicadas e testadas |
+| Segredos | os 5 cadastrados no Supabase (conferidos pelos nomes) |
+| Webhook | URL verificada pela Meta e campo `messages` assinado |
+| Teste de ponta a ponta | mensagem de teste da Meta gravada, robô respondeu certo; envio recusado com (#133010) Account not registered: o número de teste não está ativado para envio. Resolve com o número real. |
 
 ## Falta (precisa de você: são segredos, senhas e o chip)
 

@@ -50,7 +50,11 @@ async function processar(m: MensagemMeta) {
     const criado = await banco.from('clientes').insert({ telefone: m.from, origem, robo: novoEstado() }).select('*').single()
     if (criado.error) {
       // Duas mensagens juntas do mesmo numero novo: a outra criou primeiro.
+      // Em 19/10/2026 o erro real era permissao da tabela, e o log so dizia
+      // "nao encontrado": agora o motivo do banco vai junto.
+      console.warn('[meta-webhook] insert do cliente recusado:', criado.error.message)
       const de_novo = await banco.from('clientes').select('*').eq('telefone', m.from).single()
+      if (de_novo.error) throw new Error(`cliente ${m.from}: insert "${criado.error.message}", select "${de_novo.error.message}"`)
       cliente = de_novo.data
     } else {
       cliente = criado.data
