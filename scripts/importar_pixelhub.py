@@ -91,7 +91,8 @@ def montar(pasta):
         # Telefone repetido (mesmo cliente em duas conversas): junta as duas.
         cli = clientes.setdefault(tel, {
             'telefone': tel, 'nome': nome, 'origem': 'site' if site else 'anuncio', 'etapa': etapa,
-            'robo': ROBO_PAUSADO, 'nao_lidas': 0,
+            # historico: fica na tela Historico, fora do atendimento (pedido do Lucas, 20/10/2026).
+            'robo': ROBO_PAUSADO, 'nao_lidas': 0, 'historico': True,
             'motivo_perda': 'Desqualificado no atendimento do Pixel Hub' if etapa == 'perdido' else None,
             'criado_em': iso_ms(c.get('dateAdded')), 'atualizado_em': iso_ms(c.get('lastMessageDate') or c.get('dateUpdated')),
             'ultima_do_cliente_em': entrou[-1]['dateAdded'] if entrou else None,

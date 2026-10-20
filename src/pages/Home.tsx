@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Columns3,
   FileSignature,
+  History,
   LogOut,
   MessageCircle,
   MessagesSquare,
@@ -28,11 +29,12 @@ import Contratos from '@/sections/Contratos'
 import Conversas from '@/sections/Conversas'
 import FichaDoCliente from '@/sections/FichaDoCliente'
 import Funil from '@/sections/Funil'
+import Historico from '@/sections/Historico'
 import Preferencias from '@/sections/Preferencias'
 import Simulador from '@/sections/Simulador'
 import VisaoGeral from '@/sections/VisaoGeral'
 
-export type Aba = 'visao' | 'conversas' | 'funil' | 'clientes' | 'contratos' | 'agenda' | 'robo' | 'ajustes'
+export type Aba = 'visao' | 'conversas' | 'funil' | 'clientes' | 'contratos' | 'agenda' | 'historico' | 'robo' | 'ajustes'
 type Icone = ComponentType<{ className?: string; strokeWidth?: number }>
 
 const ABAS: { chave: Aba; nome: string; curto: string; icone: Icone }[] = [
@@ -42,6 +44,7 @@ const ABAS: { chave: Aba; nome: string; curto: string; icone: Icone }[] = [
   { chave: 'clientes', nome: 'Clientes', curto: 'Clientes', icone: UsersRound },
   { chave: 'contratos', nome: 'Contratos', curto: 'Contratos', icone: FileSignature },
   { chave: 'agenda', nome: 'Agenda', curto: 'Agenda', icone: CalendarDays },
+  { chave: 'historico', nome: 'Histórico', curto: 'Histórico', icone: History },
   { chave: 'robo', nome: 'Testar o robô', curto: 'Robô', icone: Bot },
   { chave: 'ajustes', nome: 'Preferências', curto: 'Ajustes', icone: Settings2 },
 ]
@@ -53,6 +56,7 @@ const META: Record<Aba, { olho: string; titulo: string; sub: string }> = {
   clientes: { olho: 'Base de atendimento', titulo: 'Clientes', sub: 'Quem chegou, o que contou e o que falta para fechar.' },
   contratos: { olho: 'Fechamento', titulo: 'Contratos', sub: 'Gerados a partir da minuta do escritório, já na versão certa para cada caso.' },
   agenda: { olho: 'Tempo do advogado', titulo: 'Agenda', sub: 'Reuniões pedidas pelo robô e confirmadas pela equipe.' },
+  historico: { olho: 'Pixel Hub', titulo: 'Histórico', sub: 'As conversas antigas, só para consulta. Quem voltar a escrever sai daqui sozinho e aparece em Conversas.' },
   robo: { olho: 'Simulador', titulo: 'Testar o robô', sub: 'Converse como se fosse a família e veja exatamente o que o robô responde.' },
   ajustes: { olho: 'Configuração', titulo: 'Preferências', sub: 'Roteiro, honorários, retornos automáticos e integrações.' },
 }
@@ -282,6 +286,7 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
             {aba === 'clientes' && <Clientes abrirCliente={abrirCliente} />}
             {aba === 'contratos' && <Contratos abrirCliente={abrirCliente} />}
             {aba === 'agenda' && <Agenda abrirCliente={abrirCliente} />}
+            {aba === 'historico' && <Historico />}
             {aba === 'robo' && <Simulador />}
             {aba === 'ajustes' && <Preferencias membro={membro} quemEstaOnline={quemEstaOnlineLigado} aoMudarQuemEstaOnline={setQuemEstaOnlineLigado} />}
           </div>

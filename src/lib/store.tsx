@@ -187,7 +187,8 @@ function ProvedorReal({ children }: { children: ReactNode }) {
         .then((c) => {
           if (pendentes.current.has(cid)) return // edicao em andamento: a tela manda ate gravar
           const lista = atual.current
-          if (!c) return aplicar(lista.filter((x) => x.id !== cid))
+          // Conversa do historico do Pixel Hub nao entra no atendimento (tela Historico).
+          if (!c || c.historico) return aplicar(lista.filter((x) => x.id !== cid))
           aplicar(lista.some((x) => x.id === cid) ? lista.map((x) => (x.id === cid ? c : x)) : [c, ...lista])
         })
         .catch((e: Error) => setErro(e.message))

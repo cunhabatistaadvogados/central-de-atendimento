@@ -95,6 +95,8 @@ export interface Cliente {
   responsavel?: string
   naoLidas: number
   motivoPerda?: string
+  /** So no modo real: conversa antiga do Pixel Hub, fica na tela Historico. */
+  historico?: boolean
 }
 
 export interface Base {

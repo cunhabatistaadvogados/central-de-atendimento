@@ -39,6 +39,7 @@ interface LinhaCliente {
   motivo_perda: string | null
   criado_em: string
   atualizado_em: string
+  historico?: boolean
 }
 
 interface LinhaContrato {
@@ -95,16 +96,53 @@ async function todas<T>(tabela: string, colunas: string, ordem: string, filtro?:
 
 const COLUNAS_MENSAGEM = 'id, cliente_id, de, texto, autor, em, status_envio, erro_envio'
 
+/**
+ * So o atendimento de 20/10/2026 em diante. O historico do Pixel Hub (1.767
+ * conversas) fica na tela Historico, pedido do Lucas: a Central recomeca
+ * zerada. O filtro vai pelo cliente (!inner), porque quem do historico volta
+ * a escrever sai dele e chega com as mensagens antigas junto.
+ */
+const doAtendimento = (q: any) => q.eq('clientes.historico', false)
+const comCliente = (colunas: string) => `${colunas}, clientes!inner(historico)`
+
 export async function carregarClientes(): Promise<Cliente[]> {
   // Falha alta e clara: tela vazia por erro silencioso ja custou caro no Marcello.
   const [cl, ms, pe, ev, co] = await Promise.all([
-    todas<LinhaCliente>('clientes', '*', 'atualizado_em'),
-    todas<Record<string, string> & { cliente_id: string }>('mensagens', COLUNAS_MENSAGEM, 'em'),
-    todas<Record<string, unknown> & { cliente_id: string }>('pendencias', '*', 'criada_em'),
-    todas<Record<string, string> & { cliente_id: string }>('eventos', '*', 'em'),
-    todas<LinhaContrato>('contratos', '*', 'atualizado_em'),
+    todas<LinhaCliente>('clientes', '*', 'atualizado_em', (q) => q.eq('historico', false)),
+    todas<Record<string, string> & { cliente_id: string }>('mensagens', comCliente(COLUNAS_MENSAGEM), 'em', doAtendimento),
+    todas<Record<string, unknown> & { cliente_id: string }>('pendencias', comCliente('*'), 'criada_em', doAtendimento),
+    todas<Record<string, string> & { cliente_id: string }>('eventos', comCliente('*'), 'em', doAtendimento),
+    todas<LinhaContrato>('contratos', comCliente('*'), 'atualizado_em', doAtendimento),
   ])
   return montarClientes(cl.reverse(), ms, pe, ev, co)
+}
+
+/** Uma linha por conversa antiga (view historico_resumo), sem as mensagens. */
+export interface ResumoHistorico {
+  id: string
+  nome: string
+  telefone: string
+  etapa: Cliente['etapa']
+  origem: Cliente['origem']
+  motivo_perda: string | null
+  criado_em: string
+  total: number
+  do_cliente: number
+  primeira_em: string | null
+  ultima_em: string | null
+  ultima_texto: string | null
+  ultima_de: Mensagem['de'] | null
+}
+
+export async function carregarHistorico(): Promise<ResumoHistorico[]> {
+  const linhas = await todas<ResumoHistorico>('historico_resumo', '*', 'criado_em')
+  return linhas.sort((a, b) => (b.ultima_em ?? b.criado_em).localeCompare(a.ultima_em ?? a.criado_em))
+}
+
+/** Tira do historico: o cliente volta para o atendimento, com as mensagens antigas. */
+export async function trazerParaOAtendimento(id: string): Promise<void> {
+  const { error } = await exigir().from('clientes').update({ historico: false }).eq('id', id)
+  if (error) throw new Error(`Não consegui tirar do histórico: ${error.message}`)
 }
 
 /** Ids dos clientes alterados desde um instante (checagem leve da rede de seguranca). */
@@ -198,6 +236,7 @@ function montarClientes(
       cidade: l.cidade ?? undefined,
       naoLidas: l.nao_lidas ?? 0,
       motivoPerda: l.motivo_perda ?? undefined,
+      historico: l.historico || undefined,
     }
   })
 }
