@@ -6,6 +6,8 @@ import { Modal } from '@/components/ui'
 import { ESCRITORIO, HONORARIOS } from '@/lib/escritorio'
 import { useDados } from '@/lib/store'
 import { supabaseConfigurado } from '@/lib/supabase'
+import type { Membro } from '@/lib/equipe'
+import EquipeEAcessos from './EquipeEAcessos'
 
 const REGRAS = [
   'Fala simples: frases curtas, no máximo 2 linhas e 1 pergunta por mensagem.',
@@ -27,19 +29,29 @@ function Status({ ok, texto }: { ok: boolean | 'parcial'; texto: string }) {
   )
 }
 
-export default function Preferencias() {
+export default function Preferencias({
+  membro,
+  quemEstaOnline,
+  aoMudarQuemEstaOnline,
+}: {
+  membro: Membro | null
+  quemEstaOnline: boolean
+  aoMudarQuemEstaOnline: (v: boolean) => void
+}) {
   const { recomecarDemonstracao } = useDados()
   const [confirmando, setConfirmando] = useState(false)
 
   const integracoes = [
-    { icone: Database, nome: 'Banco de dados (Supabase)', detalhe: 'Projeto "LOAS" da conta cunhabatistaadvogados', ok: supabaseConfigurado ? ('parcial' as const) : false, status: supabaseConfigurado ? 'Conectado · tabelas a aplicar' : 'Modo demonstração' },
-    { icone: MessageCircle, nome: 'WhatsApp Business (API oficial da Meta)', detalhe: `Número do robô: ${ESCRITORIO.whatsappDoRobo}`, ok: false, status: 'Aguardando número e app da Meta' },
+    { icone: Database, nome: 'Banco de dados (Supabase)', detalhe: 'Projeto "LOAS" da conta cunhabatistaadvogados', ok: supabaseConfigurado ? ('parcial' as const) : false, status: supabaseConfigurado ? 'Conectado · tabelas e funções no ar' : 'Modo demonstração' },
+    { icone: MessageCircle, nome: 'WhatsApp Business (API oficial da Meta)', detalhe: `Número do robô: ${ESCRITORIO.whatsappDoRobo}`, ok: 'parcial' as const, status: 'App publicado · falta ativar o número real' },
     { icone: FileSignature, nome: 'D4Sign (assinatura digital)', detalhe: 'Envio automático do contrato e aviso quando assinar', ok: false, status: 'Aguardando plano com API' },
     { icone: Clock3, nome: 'Retornos automáticos', detalhe: 'Roda de hora em hora no servidor', ok: false, status: 'Liga junto com o WhatsApp' },
   ]
 
   return (
     <div className="space-y-6">
+      <EquipeEAcessos membro={membro} quemEstaOnline={quemEstaOnline} aoMudarQuemEstaOnline={aoMudarQuemEstaOnline} />
+
       <div className="grid gap-6 xl:grid-cols-[1.1fr_1fr]">
         <section className="relative overflow-hidden rounded-[22px] bg-marinho-900 p-6 text-white">
           <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-ouro-500/15 blur-3xl" />

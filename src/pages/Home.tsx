@@ -20,6 +20,8 @@ import { ArteDoMenu, MarcaHorizontal, SeloCB } from '@/components/Marca'
 import { esperandoEquipe } from '@/lib/atendimento'
 import { hojeExtenso, mesmoDia } from '@/lib/formato'
 import { DADOS_NO_NAVEGADOR, useDados } from '@/lib/store'
+import QuemEstaOnline from '@/components/QuemEstaOnline'
+import { PAPEIS, useConfigQuemEstaOnline, useQuemEstaOnline } from '@/lib/equipe'
 import Agenda from '@/sections/Agenda'
 import Clientes from '@/sections/Clientes'
 import Contratos from '@/sections/Contratos'
@@ -57,6 +59,9 @@ const META: Record<Aba, { olho: string; titulo: string; sub: string }> = {
 
 export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () => void }) {
   const { clientes } = useDados()
+  const membro = sessao.membro ?? null
+  const [quemEstaOnlineLigado, setQuemEstaOnlineLigado] = useConfigQuemEstaOnline(Boolean(membro))
+  const online = useQuemEstaOnline(membro, quemEstaOnlineLigado)
   const [aba, setAba] = useState<Aba>('visao')
   const [fichaAberta, setFichaAberta] = useState<{ id: string; aba?: 'resumo' | 'conversa' | 'contrato' | 'historico' } | null>(null)
   const [conversaFoco, setConversaFoco] = useState<string | null>(null)
@@ -138,6 +143,11 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
               )
             })}
           </nav>
+          {membro && quemEstaOnlineLigado ? (
+            <div className="mx-4 mb-4 [@media(max-height:760px)]:hidden">
+              <QuemEstaOnline online={online} />
+            </div>
+          ) : (
           <div className="relative mx-4 mb-4 overflow-hidden rounded-[22px] border border-white/10 bg-white/[0.05] p-4 [@media(max-height:900px)]:hidden">
             <div className="absolute -right-5 -top-5 h-20 w-20 rounded-full bg-ouro-500/15 blur-2xl" />
             <div className="relative flex items-center gap-3">
@@ -150,11 +160,14 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
               </div>
             </div>
           </div>
+          )}
           <div className="flex items-center gap-3 border-t border-white/10 px-6 py-5">
             <SeloCB className="h-10 w-10 shrink-0 rounded-full" />
             <div className="min-w-0">
               <p className="truncate text-xs font-bold text-white/90">{sessao.nome}</p>
-              <p className="mt-0.5 truncate text-[10px] text-white/40">{sessao.demonstracao ? 'Acesso de demonstração' : sessao.email}</p>
+              <p className="mt-0.5 truncate text-[10px] text-white/40">
+                {membro ? `${PAPEIS[membro.papel]}${membro.papel === 'desenvolvedor' ? ' · invisível' : ''}` : sessao.demonstracao ? 'Acesso de demonstração' : sessao.email}
+              </p>
             </div>
             <button
               type="button"
@@ -180,9 +193,12 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
               <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.2em] text-white/40">Central de atendimento</p>
             </div>
           </div>
-          <button type="button" onClick={onSair} aria-label="Sair" className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.07] text-white/60">
-            <LogOut className="h-[18px] w-[18px]" />
-          </button>
+          <div className="flex items-center gap-3">
+            {membro && quemEstaOnlineLigado && <QuemEstaOnline online={online} compacto />}
+            <button type="button" onClick={onSair} aria-label="Sair" className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.07] text-white/60">
+              <LogOut className="h-[18px] w-[18px]" />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -212,7 +228,7 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
             {aba === 'contratos' && <Contratos abrirCliente={abrirCliente} />}
             {aba === 'agenda' && <Agenda abrirCliente={abrirCliente} />}
             {aba === 'robo' && <Simulador />}
-            {aba === 'ajustes' && <Preferencias />}
+            {aba === 'ajustes' && <Preferencias membro={membro} quemEstaOnline={quemEstaOnlineLigado} aoMudarQuemEstaOnline={setQuemEstaOnlineLigado} />}
           </div>
         </div>
       </main>
