@@ -31,6 +31,54 @@ export interface Online {
   user_id: string
   nome: string
   papel: Papel
+  /** Caminho da foto no bucket; sem foto, a tela mostra as iniciais. */
+  foto?: string | null
+}
+
+/*
+ * Foto da equipe (migration 20261019200000), igual ao sistema do Marcello.
+ * Tudo aqui falha para o lado quieto de proposito: sem a coluna nova no banco
+ * ou sem foto, aparecem as iniciais. Foto e enfeite, nao pode derrubar o
+ * login de ninguem; por isso ela e lida em consulta separada do cadastro.
+ */
+const BUCKET = 'fotos-da-equipe'
+
+// O bucket e privado: link temporario de 1h, reaproveitado por 50 min.
+const linkCache = new Map<string, { url: string; ate: number }>()
+export async function linkDaFoto(caminho: string | null | undefined): Promise<string | null> {
+  if (!caminho || !supabase) return null
+  const guardado = linkCache.get(caminho)
+  if (guardado && guardado.ate > Date.now()) return guardado.url
+  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(caminho, 3600)
+  if (error || !data?.signedUrl) return null
+  linkCache.set(caminho, { url: data.signedUrl, ate: Date.now() + 50 * 60 * 1000 })
+  return data.signedUrl
+}
+
+export async function lerMinhaFoto(userId: string): Promise<string | null> {
+  if (!supabase) return null
+  try {
+    const { data, error } = await supabase.from('equipe').select('foto').eq('user_id', userId).maybeSingle()
+    if (error) throw error
+    return (data as { foto?: string | null } | null)?.foto ?? null
+  } catch (erro) {
+    console.warn('Foto da equipe indisponivel', erro)
+    return null
+  }
+}
+
+/** Envia a foto ja ajustada (256x256) e grava o caminho no cadastro. */
+export async function enviarMinhaFoto(userId: string, arquivo: File, anterior: string | null): Promise<string> {
+  if (!supabase) throw new Error('Foto só funciona com o banco do escritório ligado.')
+  const caminho = `${userId}/${Date.now()}.jpg`
+  const { error: erroEnvio } = await supabase.storage.from(BUCKET).upload(caminho, arquivo, { contentType: 'image/jpeg', upsert: false })
+  if (erroEnvio) throw new Error(`Não consegui enviar a foto: ${erroEnvio.message}`)
+  const { error } = await supabase.rpc('definir_minha_foto', { p_caminho: caminho })
+  if (error) throw new Error(`Foto enviada, mas não consegui salvar no cadastro: ${error.message}`)
+  // A antiga sai depois que a nova esta gravada: se falhar, sobra so um
+  // arquivo orfao, nunca um cadastro sem foto.
+  if (anterior && anterior !== caminho) await supabase.storage.from(BUCKET).remove([anterior]).catch(() => undefined)
+  return caminho
 }
 
 export function podeAdministrar(m: Membro | null | undefined): boolean {
@@ -89,7 +137,7 @@ export async function definirQuemEstaOnline(ligado: boolean, userId: string) {
  * (para ver quem esta online); so quem apareceOnline() se ANUNCIA. Assim o
  * desenvolvedor ve a equipe e ninguem ve o desenvolvedor.
  */
-export function useQuemEstaOnline(eu: Membro | null, ligado: boolean): Online[] {
+export function useQuemEstaOnline(eu: Membro | null, ligado: boolean, minhaFoto: string | null = null): Online[] {
   const [online, setOnline] = useState<Online[]>([])
   const anunciar = apareceOnline(eu)
 
@@ -105,16 +153,17 @@ export function useQuemEstaOnline(eu: Membro | null, ligado: boolean): Online[] 
         .map((lista) => lista[0])
         .filter((p): p is Online & { presence_ref: string } => Boolean(p && p.user_id))
         .filter((p) => p.papel !== 'desenvolvedor')
-        .map(({ user_id, nome, papel }) => ({ user_id, nome, papel }))
+        .map(({ user_id, nome, papel, foto }) => ({ user_id, nome, papel, foto: foto ?? null }))
       setOnline(pessoas)
     })
     canal.subscribe((status) => {
-      if (status === 'SUBSCRIBED' && anunciar) void canal.track({ user_id: eu.user_id, nome: eu.nome, papel: eu.papel })
+      // A foto vai junto no anuncio: quem esta online ja ve a fotinho sem ler o banco.
+      if (status === 'SUBSCRIBED' && anunciar) void canal.track({ user_id: eu.user_id, nome: eu.nome, papel: eu.papel, foto: minhaFoto })
     })
     return () => {
       void supabase?.removeChannel(canal)
     }
-  }, [eu, ligado, anunciar])
+  }, [eu, ligado, anunciar, minhaFoto])
 
   return online
 }

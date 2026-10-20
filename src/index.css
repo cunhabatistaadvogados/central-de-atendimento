@@ -128,6 +128,26 @@
   .pulso-whatsapp {
     animation: pulso-whatsapp 2.6s ease-in-out infinite;
   }
+  /* A sua foto no topo: anel marinho pulsando devagar, como no Marcello,
+     para mostrar que da para clicar e trocar. */
+  .foto-pulsante {
+    box-shadow: 0 0 0 2px #0f2a4a;
+    animation: foto-pulso 2.8s ease-in-out infinite;
+  }
+}
+
+@keyframes foto-pulso {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px #0f2a4a,
+      0 0 0 2px rgba(15, 42, 74, 0.45);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px #0f2a4a,
+      0 0 0 9px rgba(15, 42, 74, 0);
+  }
 }
 
 @keyframes pulso-whatsapp {

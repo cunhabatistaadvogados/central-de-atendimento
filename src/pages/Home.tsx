@@ -21,7 +21,7 @@ import { hojeExtenso, mesmoDia } from '@/lib/formato'
 import { ligarModoWhatsApp } from '@/lib/modo-whatsapp'
 import { useDados } from '@/lib/store'
 import QuemEstaOnline from '@/components/QuemEstaOnline'
-import { PAPEIS, useConfigQuemEstaOnline, useQuemEstaOnline } from '@/lib/equipe'
+import { enviarMinhaFoto, lerMinhaFoto, PAPEIS, useConfigQuemEstaOnline, useQuemEstaOnline } from '@/lib/equipe'
 import Agenda from '@/sections/Agenda'
 import Clientes from '@/sections/Clientes'
 import Contratos from '@/sections/Contratos'
@@ -61,7 +61,18 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
   const { clientes, erro: erroDosDados, carregando, recarregar, demonstracao } = useDados()
   const membro = sessao.membro ?? null
   const [quemEstaOnlineLigado, setQuemEstaOnlineLigado] = useConfigQuemEstaOnline(Boolean(membro))
-  const online = useQuemEstaOnline(membro, quemEstaOnlineLigado)
+  const [minhaFoto, setMinhaFoto] = useState<string | null>(null)
+  useEffect(() => {
+    if (membro) void lerMinhaFoto(membro.user_id).then(setMinhaFoto)
+  }, [membro])
+  const trocarMinhaFoto = useCallback(
+    async (arquivo: File) => {
+      if (!membro) return
+      setMinhaFoto(await enviarMinhaFoto(membro.user_id, arquivo, minhaFoto))
+    },
+    [membro, minhaFoto],
+  )
+  const online = useQuemEstaOnline(membro, quemEstaOnlineLigado, minhaFoto)
   const [aba, setAba] = useState<Aba>('visao')
   const [fichaAberta, setFichaAberta] = useState<{ id: string; aba?: 'resumo' | 'conversa' | 'contrato' | 'historico' } | null>(null)
   const [conversaFoco, setConversaFoco] = useState<string | null>(null)
@@ -149,11 +160,8 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
               )
             })}
           </nav>
-          {membro && quemEstaOnlineLigado ? (
-            <div className="mx-4 mb-4 [@media(max-height:760px)]:hidden">
-              <QuemEstaOnline online={online} />
-            </div>
-          ) : (
+          {/* Quem esta online foi para o topo da pagina (como no Marcello); aqui
+              voltou o cartao de sigilo, pedido do Edu em 19/10/2026. */}
           <div className="relative mx-4 mb-4 overflow-hidden rounded-[22px] border border-white/10 bg-white/[0.05] p-4 [@media(max-height:900px)]:hidden">
             <div className="absolute -right-5 -top-5 h-20 w-20 rounded-full bg-ouro-500/15 blur-2xl" />
             <div className="relative flex items-center gap-3">
@@ -166,7 +174,6 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
               </div>
             </div>
           </div>
-          )}
           <div className="flex items-center gap-3 border-t border-white/10 px-6 py-5">
             <SeloCB className="h-10 w-10 shrink-0 rounded-full" />
             <div className="min-w-0">
@@ -206,7 +213,7 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
             </div>
           </div>
           <div className="flex items-center gap-2.5">
-            {membro && quemEstaOnlineLigado && <QuemEstaOnline online={online} compacto />}
+            {membro && quemEstaOnlineLigado && <QuemEstaOnline online={online} eu={membro} compacto />}
             {/* Modo WhatsApp (igual ao do Marcello): leva as Conversas ja em
                 tela cheia, lista e conversa como no app. "Chat normal", la
                 dentro, volta ao visual de sempre. */}
@@ -244,7 +251,19 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
               <h1 className="titulo-serif text-[34px] leading-none text-marinho-900 sm:text-[42px]">{meta.titulo}</h1>
               <p className="mt-2 max-w-2xl text-sm text-slate-500">{meta.sub}</p>
             </div>
-            <p className="text-xs font-semibold text-slate-400">{hojeExtenso()}</p>
+            {/* Topo da direita, igual ao Marcello: fotinhas de quem esta online
+                (a sua por ultimo, clicavel para trocar) e a data num balao. */}
+            <div className="flex items-center gap-3">
+              {membro && (
+                <div className="hidden lg:block">
+                  <QuemEstaOnline online={online} eu={membro} minhaFoto={minhaFoto} mostrarColegas={quemEstaOnlineLigado} onEscolherFoto={trocarMinhaFoto} />
+                </div>
+              )}
+              <div className="hidden items-center gap-2.5 rounded-2xl border border-marinho-900/[0.07] bg-white/70 px-4 py-3 text-xs font-semibold text-slate-500 shadow-sm backdrop-blur sm:flex">
+                <CalendarDays className="h-4 w-4 text-ouro-600" />
+                {hojeExtenso()}
+              </div>
+            </div>
           </div>
 
           {erroDosDados && (
