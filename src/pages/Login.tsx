@@ -52,8 +52,10 @@ export default function Login({ onEntrar }: { onEntrar: (s: Sessao) => void }) {
             foto os dois da direita estao atras de uma mesa, com perna e sapato
             cortados retos. Ocupa a metade de baixo, o titulo fica em cima.
             O nono, no canto direito, entrou depois (20/10/2026) a partir de
-            uma selfie: corpo virado para o centro gerado no Higgsfield e o
-            ROSTO DA FOTO REAL dele encaixado por cima. */}
+            uma selfie: a imagem dele (rosto e corpo) foi GERADA no Higgsfield
+            com a selfie de referencia e espelhada para ficar virada para o
+            centro. O rosto da selfie encaixado destoava da luz (Edu pediu o
+            da geracao). Trocar por foto real quando houver. */}
         <img
           src={EQUIPE[VISUAL_DA_EQUIPE].src}
           alt=""
