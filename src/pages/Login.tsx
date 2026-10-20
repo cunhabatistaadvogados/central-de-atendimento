@@ -1,8 +1,8 @@
 import { ArrowRight, Eye, Lock, Mail, ShieldCheck } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import type { Sessao } from '@/App'
+import equipe from '@/assets/equipe-branca.webp'
 import logo from '@/assets/logo-cbaa.jpg'
-import { ArteDoMenu } from '@/components/Marca'
 import { ESCRITORIO } from '@/lib/escritorio'
 import { supabase, supabaseConfigurado } from '@/lib/supabase'
 
@@ -30,11 +30,26 @@ export default function Login({ onEntrar }: { onEntrar: (s: Sessao) => void }) {
   }
 
   return (
-    <div className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
+    // Capa com 70% e acesso com 30% (pedido do Edu, 19/10/2026); o acesso nunca
+    // fica abaixo de 400px, senao o formulario espreme em telas de 1280.
+    // A capa anterior, sem a equipe, esta na tag git login-capa-antiga.
+    <div className="grid min-h-dvh lg:grid-cols-[minmax(0,7fr)_minmax(400px,3fr)]">
       <section className="relative hidden overflow-hidden bg-marinho-900 text-white lg:flex lg:flex-col lg:justify-between lg:p-14">
-        <ArteDoMenu />
         <div className="grade-suave absolute inset-0 opacity-50" />
         <div className="absolute -right-32 top-24 h-96 w-96 rounded-full bg-ouro-500/10 blur-3xl" />
+        {/* A equipe em branco transparente. Recorte da foto do site feito no
+            Higgsfield (so tira o fundo, nao redesenha ninguem: rosto de gente
+            de verdade nao pode sair alterado) e clareado aqui no projeto. A
+            mascara apaga os pes no navy, por baixo dos numeros. */}
+        <img
+          src={equipe}
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+          className="pointer-events-none absolute bottom-0 right-0 h-[80%] w-[98%] select-none object-contain object-right-bottom opacity-[0.28] [mask-image:linear-gradient(to_top,transparent,#000_30%)]"
+        />
+        {/* Veu da esquerda: o titulo fica legivel por cima da equipe. */}
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-[48%] bg-gradient-to-r from-marinho-900/90 via-marinho-900/50 to-transparent" />
         <div className="relative flex items-center gap-4">
           <img src={logo} alt="CB& Advogados Associados" className="h-16 w-16 rounded-2xl shadow-[0_14px_30px_rgba(0,0,0,.35)]" />
           <div>
