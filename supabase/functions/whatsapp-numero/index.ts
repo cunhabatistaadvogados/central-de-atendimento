@@ -4,6 +4,7 @@
 //   status     o que a Meta diz do numero e quais apps recebem os eventos
 //   assinar    liga os webhooks do nosso app na conta do WhatsApp nova
 //   registrar  registra o numero na Cloud API com o PIN de duas etapas
+//   foto       troca a foto do perfil do numero (logo do escritorio)
 //
 // Usa o token do usuario do sistema (segredo WHATSAPP_ACCESS_TOKEN), que so
 // existe aqui dentro. Quem chama precisa mandar a chave service_role: so roda
@@ -52,7 +53,25 @@ Deno.serve(async (req) => {
     // health_status diz por que o numero nao envia (pagamento, nome, registro).
     const numero = await meta('GET', `${telefone}?fields=display_phone_number,verified_name,name_status,status,code_verification_status,quality_rating,platform_type,throughput,account_mode,last_onboarded_time,health_status`)
     const apps = await meta('GET', `${conta}/subscribed_apps`)
-    return json({ numero, apps })
+    const perfil = await meta('GET', `${telefone}/whatsapp_business_profile?fields=about,description,email,websites,vertical,profile_picture_url`)
+    return json({ numero, apps, perfil })
+  }
+  if (corpo.acao === 'foto') {
+    // Foto do perfil pela API de upload retomavel: cria a sessao no app, manda
+    // os bytes e usa o "handle" devolvido no perfil do numero.
+    const app = String(corpo.app_id ?? '')
+    const bytes = Uint8Array.from(atob(String(corpo.imagem ?? '')), (c) => c.charCodeAt(0))
+    if (!/^\d{6,}$/.test(app) || !bytes.length) return json({ error: 'app_id e imagem (base64) são obrigatórios.' }, 400)
+    const sessao = await meta('POST', `${app}/uploads?file_name=perfil.jpg&file_length=${bytes.length}&file_type=image/jpeg`)
+    if (!sessao.resposta?.id) return json({ etapa: 'sessao', ...sessao })
+    const r = await fetch(`${GRAPH}/${sessao.resposta.id}`, {
+      method: 'POST',
+      headers: { Authorization: `OAuth ${Deno.env.get('WHATSAPP_ACCESS_TOKEN')}`, file_offset: '0' },
+      body: bytes,
+    })
+    const envio = { http: r.status, resposta: await r.json().catch(() => null) }
+    if (!envio.resposta?.h) return json({ etapa: 'envio', ...envio })
+    return json(await meta('POST', `${telefone}/whatsapp_business_profile`, { messaging_product: 'whatsapp', profile_picture_handle: envio.resposta.h }))
   }
   if (corpo.acao === 'assinar') return json(await meta('POST', `${conta}/subscribed_apps`))
   if (corpo.acao === 'registrar') {

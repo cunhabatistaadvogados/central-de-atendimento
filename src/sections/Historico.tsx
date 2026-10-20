@@ -145,7 +145,8 @@ function ConversaAntiga({ id, onFechar, onTrazido }: { id: string; onFechar: () 
           {confirmar ? (
             <div className="flex flex-wrap items-center gap-3">
               <p className="min-w-0 flex-1 text-sm text-slate-600">
-                <strong className="text-marinho-900">{c.nome || c.telefone}</strong> volta para Conversas, Funil e Clientes, com esta conversa junto. O robô continua pausado.
+                <strong className="text-marinho-900">{c.nome || c.telefone}</strong> volta para Conversas, Funil e Clientes, com esta conversa junto.{' '}
+                {c.robo.pausado ? 'O robô continua pausado: quem responde é a equipe.' : 'Se a pessoa escrever, o robô atende.'}
               </p>
               <button type="button" onClick={() => setConfirmar(false)} className="botao-claro py-2 text-xs" disabled={trazendo}>
                 Cancelar
@@ -156,7 +157,9 @@ function ConversaAntiga({ id, onFechar, onTrazido }: { id: string; onFechar: () 
             </div>
           ) : (
             <div className="flex flex-wrap items-center gap-3">
-              <p className="min-w-0 flex-1 text-xs text-slate-500">Se a pessoa voltar a escrever, ela sai do histórico sozinha.</p>
+              <p className="min-w-0 flex-1 text-xs text-slate-500">
+                Se a pessoa voltar a escrever, ela sai do histórico sozinha{c.robo.pausado ? ' e cai para a equipe.' : ' e o robô atende.'}
+              </p>
               <button type="button" onClick={() => setConfirmar(true)} className="botao-claro py-2 text-xs">
                 <Undo2 className="h-3.5 w-3.5" /> Trazer para o atendimento
               </button>
