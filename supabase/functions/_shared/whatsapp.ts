@@ -11,7 +11,7 @@ export interface ResultadoEnvio {
 export async function enviarTexto(para: string, texto: string): Promise<ResultadoEnvio> {
   const token = Deno.env.get('WHATSAPP_ACCESS_TOKEN')
   const numeroId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')
-  const versao = Deno.env.get('META_GRAPH_VERSION') ?? 'v23.0'
+  const versao = Deno.env.get('META_GRAPH_VERSION') ?? 'v25.0'
   // Falha silenciosa e pior que falha barulhenta (licao do sistema do Dr.
   // Marcello): sem segredo, o erro volta e fica gravado na mensagem.
   if (!token || !numeroId) return { ok: false, erro: 'WHATSAPP_ACCESS_TOKEN ou WHATSAPP_PHONE_NUMBER_ID ausente nos segredos do Supabase' }
