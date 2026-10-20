@@ -13,7 +13,7 @@ Estado em 19/10/2026. Tudo está na conta da Meta do Edu, no portfólio
 | Número do robô | +55 (13) 99741-4361, preenchido em "Adicionar telefone", falta o código do chip |
 | Usuário do sistema | robo-atendimento (admin), com controle total do app e da conta WhatsApp |
 | Modelo de mensagem | `retorno_pendencia` (Utilidade, pt_BR), em análise na Meta |
-| Supabase | tabelas criadas; função `whatsapp-send` publicada; `meta-webhook` pronta para publicar |
+| Supabase | tabelas criadas; `whatsapp-send` (com login) e `meta-webhook` (sem login, protegida pela assinatura da Meta) publicadas e testadas |
 
 ## Falta (precisa de você: são segredos, senhas e o chip)
 
@@ -29,8 +29,8 @@ Nenhum token vai em arquivo, chat ou código. Só nos lugares abaixo.
      `whatsapp_business_management`.
    - `WHATSAPP_PHONE_NUMBER_ID`: `1316032894934489` para testar com o número
      de teste; trocar pelo id do número real depois do passo 5.
-2. Me avisar para publicar a `meta-webhook` (ou ela sobe sozinha pelo GitHub
-   depois do passo 6).
+2. (Feito) `meta-webhook` publicada. Sem os segredos ela responde "forbidden"
+   na verificação e "assinatura invalida" no POST, como esperado.
 3. **Meta > app > WhatsApp > Configuração > Webhook**:
    URL `https://wizoolakyttjrahpbgec.supabase.co/functions/v1/meta-webhook`,
    token de verificação = o mesmo do passo 1, "Verificar e salvar", e assinar
