@@ -69,17 +69,23 @@ const PAGINA = 1000
  */
 async function todas<T>(tabela: string, colunas: string, ordem: string, filtro?: (q: any) => any): Promise<T[]> {
   const db = exigir()
-  const base = () => {
+  // A contagem total so na primeira pagina: pedida em todas, eram 23 contagens
+  // da tabela inteira ao mesmo tempo (20/10/2026).
+  const base = (contar: boolean) => {
     // contratos nao tem coluna id: a chave e o cliente_id.
-    const q = db.from(tabela).select(colunas, { count: 'exact' }).order(ordem).order(tabela === 'contratos' ? 'cliente_id' : 'id')
+    const q = db
+      .from(tabela)
+      .select(colunas, contar ? { count: 'exact' } : undefined)
+      .order(ordem)
+      .order(tabela === 'contratos' ? 'cliente_id' : 'id')
     return filtro ? filtro(q) : q
   }
-  const primeira = (await base().range(0, PAGINA - 1)) as Awaited<Resposta<T>>
+  const primeira = (await base(true).range(0, PAGINA - 1)) as Awaited<Resposta<T>>
   if (primeira.error) throw new Error(`Não consegui ler o banco (${tabela}): ${primeira.error.message}`)
   const total = primeira.count ?? (primeira.data?.length ?? 0)
   const linhas = [...(primeira.data ?? [])]
   const resto: Promise<Awaited<Resposta<T>>>[] = []
-  for (let de = PAGINA; de < total; de += PAGINA) resto.push(Promise.resolve(base().range(de, de + PAGINA - 1)) as Promise<Awaited<Resposta<T>>>)
+  for (let de = PAGINA; de < total; de += PAGINA) resto.push(Promise.resolve(base(false).range(de, de + PAGINA - 1)) as Promise<Awaited<Resposta<T>>>)
   for (const r of await Promise.all(resto)) {
     if (r.error) throw new Error(`Não consegui ler o banco (${tabela}): ${r.error.message}`)
     linhas.push(...(r.data ?? []))
@@ -99,6 +105,13 @@ export async function carregarClientes(): Promise<Cliente[]> {
     todas<LinhaContrato>('contratos', '*', 'atualizado_em'),
   ])
   return montarClientes(cl.reverse(), ms, pe, ev, co)
+}
+
+/** Ids dos clientes alterados desde um instante (checagem leve da rede de seguranca). */
+export async function clientesMudadosDesde(desde: string): Promise<string[]> {
+  const { data, error } = await exigir().from('clientes').select('id').gt('atualizado_em', desde).limit(1000)
+  if (error) throw new Error(`Não consegui ler o banco (clientes): ${error.message}`)
+  return (data ?? []).map((l) => (l as { id: string }).id)
 }
 
 /** So um cliente: o tempo real atualiza quem mudou, sem reler a base inteira. */

@@ -3,7 +3,7 @@ import type { Etapa } from '@motor/robo'
 import { enviarComoEquipe, id, novoCliente, rascunhoDoContrato, receberDoCliente } from './atendimento'
 import { baseDeDemonstracao } from './dados-demo'
 import { etapa as infoEtapa } from './escritorio'
-import { carregarClientes, carregarUmCliente, enviarResposta, gravarDiferenca } from './repositorio'
+import { carregarClientes, carregarUmCliente, clientesMudadosDesde, enviarResposta, gravarDiferenca } from './repositorio'
 import { supabase } from './supabase'
 import type { Base, Cliente, Contrato, Documentos, Origem } from './tipos'
 
@@ -218,8 +218,17 @@ function ProvedorReal({ children }: { children: ReactNode }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'mensagens' }, (p) => depois(((p.new as Linha)?.cliente_id ?? (p.old as Linha)?.cliente_id)))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes' }, (p) => depois(((p.new as Linha)?.id ?? (p.old as Linha)?.id)))
       .subscribe()
-    // Rede de seguranca: se o Realtime cair, a tela ainda se atualiza.
-    const periodico = window.setInterval(recarregar, 5 * 60000)
+    // Rede de seguranca: se o Realtime cair, a tela ainda se atualiza. So
+    // pergunta QUEM mudou: reler a base inteira (12 MB com o historico do Pixel
+    // Hub) a cada 5 min, por aba aberta, estourava a cota de trafego do Supabase.
+    let ultimaChecagem = Date.now()
+    const periodico = window.setInterval(() => {
+      const desde = new Date(ultimaChecagem - 120000).toISOString() // 2 min de folga
+      ultimaChecagem = Date.now()
+      clientesMudadosDesde(desde)
+        .then((ids) => (ids.length > 20 ? recarregar() : ids.forEach(atualizarUm)))
+        .catch((e: Error) => setErro(e.message))
+    }, 5 * 60000)
     return () => {
       window.clearTimeout(timer)
       window.clearInterval(periodico)
