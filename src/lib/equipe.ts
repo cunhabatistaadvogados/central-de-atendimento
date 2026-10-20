@@ -115,23 +115,47 @@ export async function atualizarMembro(userId: string, campos: Partial<Pick<Membr
  * por e-mail (remetente: Gmail do escritorio) e libera o papel. Se o e-mail ja
  * tem login, so libera. Devolve se saiu convite novo.
  */
-export async function convidarMembro(email: string, nome: string, papel: Papel): Promise<boolean> {
-  if (!supabase) throw new Error('Convite só funciona com o banco do escritório ligado.')
+// Todas as acoes de acesso passam pela funcao convidar-membro (chave de servico
+// so no servidor). O corpo do erro traz o motivo real (ex.: SMTP recusou).
+async function acessos<T>(corpo: Record<string, unknown>): Promise<T> {
+  if (!supabase) throw new Error('Disponível só com o banco do escritório ligado.')
   const voltar = `${window.location.origin}${window.location.pathname}`
-  const { data, error } = await supabase.functions.invoke('convidar-membro', { body: { email, nome, papel, voltar } })
+  const { data, error } = await supabase.functions.invoke('convidar-membro', { body: { ...corpo, voltar } })
   if (error) {
-    // O corpo do erro da funcao traz o motivo real (ex.: SMTP recusou).
     let motivo = error.message
     try {
-      const corpo = await (error as { context?: Response }).context?.json()
-      if (corpo?.error) motivo = corpo.error
+      const resposta = await (error as { context?: Response }).context?.json()
+      if (resposta?.error) motivo = resposta.error
     } catch {
       // sem corpo legivel: fica a mensagem generica
     }
     throw new Error(motivo)
   }
   if (data?.error) throw new Error(data.error)
-  return Boolean(data?.convidado)
+  return data as T
+}
+
+export async function convidarMembro(email: string, nome: string, papel: Papel): Promise<boolean> {
+  const r = await acessos<{ convidado?: boolean }>({ acao: 'convidar', email, nome, papel })
+  return Boolean(r.convidado)
+}
+
+/** Link de acesso para mandar pelo WhatsApp (o e-mail pode cair na quarentena). */
+export async function linkDeAcesso(userId: string): Promise<{ link: string; tipo: 'invite' | 'recovery' }> {
+  return acessos({ acao: 'link', user_id: userId })
+}
+
+/** Apaga o login e tira da equipe; da para convidar de novo depois. */
+export async function excluirMembro(userId: string): Promise<void> {
+  await acessos({ acao: 'excluir', user_id: userId })
+}
+
+export type Situacao = Record<string, { email: string; criouSenha: boolean; ultimoAcesso: string | null }>
+
+/** Quem ja criou a senha e quando entrou: o banco nao expoe isso a tela. */
+export async function situacaoDosAcessos(): Promise<Situacao> {
+  const r = await acessos<{ situacao: Situacao }>({ acao: 'situacao' })
+  return r.situacao ?? {}
 }
 
 export async function adicionarMembro(email: string, nome: string, papel: Papel) {
