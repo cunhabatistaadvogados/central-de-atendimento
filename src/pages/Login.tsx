@@ -5,7 +5,7 @@ import equipeBranca from '@/assets/equipe-branca.webp'
 import equipeCores from '@/assets/equipe-cores.webp'
 import logo from '@/assets/logo-cbaa.jpg'
 import { ESCRITORIO } from '@/lib/escritorio'
-import { supabase, supabaseConfigurado } from '@/lib/supabase'
+import { erroDoLinkDeEmail, supabase, supabaseConfigurado } from '@/lib/supabase'
 
 // As duas versoes da equipe na capa, para o escritorio escolher: as cores
 // reais da foto ou o branco transparente. Trocar e so mudar esta linha.
@@ -18,8 +18,23 @@ const VISUAL_DA_EQUIPE: keyof typeof EQUIPE = 'cores'
 export default function Login({ onEntrar }: { onEntrar: (s: Sessao) => void }) {
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
-  const [erro, setErro] = useState('')
+  const [erro, setErro] = useState(
+    erroDoLinkDeEmail ? 'O link do e-mail venceu ou já foi usado. Peça um convite novo ao administrador ou use "Esqueci minha senha".' : '',
+  )
+  const [aviso, setAviso] = useState('')
   const [entrando, setEntrando] = useState(false)
+
+  // Esqueci a senha: o Supabase manda o link pelo Gmail do escritorio e a
+  // pessoa cria a senha nova na tela CriarSenha (App.tsx).
+  async function esqueciASenha() {
+    setErro('')
+    setAviso('')
+    if (!supabase) return setErro('Disponível quando o banco do escritório estiver ligado.')
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setErro('Digite o seu e-mail no campo acima e clique de novo.')
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: `${window.location.origin}${window.location.pathname}` })
+    if (error) return setErro(`Não consegui enviar o link: ${error.message}`)
+    setAviso(`Se ${email.trim()} tiver acesso, chega em instantes um e-mail com o link para criar a senha nova.`)
+  }
 
   async function entrar(e: FormEvent) {
     e.preventDefault()
@@ -128,7 +143,11 @@ export default function Login({ onEntrar }: { onEntrar: (s: Sessao) => void }) {
                 <input className="campo pl-10" type="password" autoComplete="current-password" value={senha} onChange={(e) => setSenha(e.target.value)} required />
               </span>
             </label>
+            <button type="button" onClick={() => void esqueciASenha()} className="-mt-1 text-xs font-semibold text-ouro-700 hover:underline">
+              Esqueci minha senha
+            </button>
             {erro && <p className="rounded-xl bg-red-50 px-3.5 py-2.5 text-xs font-semibold text-red-700">{erro}</p>}
+            {aviso && <p className="rounded-xl bg-emerald-50 px-3.5 py-2.5 text-xs font-semibold text-emerald-700">{aviso}</p>}
             <button type="submit" disabled={entrando} className="botao-primario w-full py-3">
               {entrando ? 'Entrando...' : 'Entrar'}
               <ArrowRight className="h-4 w-4" />

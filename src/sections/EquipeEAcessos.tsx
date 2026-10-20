@@ -1,7 +1,7 @@
 import { Eye, EyeOff, Lock, UserPlus, UsersRound } from 'lucide-react'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Avatar, Campo, Interruptor } from '@/components/ui'
-import { adicionarMembro, atualizarMembro, definirQuemEstaOnline, listarEquipe, PAPEIS, podeAdministrar, type Membro, type Papel } from '@/lib/equipe'
+import { atualizarMembro, convidarMembro, definirQuemEstaOnline, listarEquipe, PAPEIS, podeAdministrar, type Membro, type Papel } from '@/lib/equipe'
 
 const PAPEIS_DA_EQUIPE: Papel[] = ['atendimento', 'advogado', 'administrador']
 
@@ -46,9 +46,23 @@ export default function EquipeEAcessos({
   async function adicionar(e: FormEvent) {
     e.preventDefault()
     setSalvando(true)
-    await executar(() => adicionarMembro(novo.email, novo.nome, novo.papel), `${novo.nome} agora faz parte da equipe.`)
-    setNovo({ email: '', nome: '', papel: 'atendimento' })
-    setSalvando(false)
+    setErro('')
+    setAviso('')
+    try {
+      const convidado = await convidarMembro(novo.email.trim(), novo.nome.trim(), novo.papel)
+      setAviso(
+        convidado
+          ? `Convite enviado para ${novo.email.trim()}. ${novo.nome.trim()} abre o e-mail, cria a senha e já entra.`
+          : `${novo.email.trim()} já tinha login: o acesso de ${novo.nome.trim()} foi liberado.`,
+      )
+      setNovo({ email: '', nome: '', papel: 'atendimento' })
+      recarregar()
+    } catch (erro) {
+      // O formulario fica preenchido para tentar de novo.
+      setErro(erro instanceof Error ? erro.message : 'Não foi possível criar o acesso.')
+    } finally {
+      setSalvando(false)
+    }
   }
 
   if (!membro) {
@@ -150,13 +164,13 @@ export default function EquipeEAcessos({
       {admin && (
         <form onSubmit={adicionar} className="mt-5 rounded-2xl border border-ouro-200 bg-ouro-50/50 p-4">
           <p className="flex items-center gap-2 text-sm font-bold text-marinho-900">
-            <UserPlus className="h-4 w-4 text-ouro-600" /> Liberar acesso para alguém da equipe
+            <UserPlus className="h-4 w-4 text-ouro-600" /> Criar acesso para alguém da equipe
           </p>
           <p className="mt-1 text-[11px] text-slate-500">
-            Primeiro crie o login da pessoa no Supabase (Authentication &gt; Users &gt; Add user, com "Auto Confirm User"). Depois libere aqui pelo mesmo e-mail.
+            A pessoa recebe um convite no e-mail (enviado pelo Gmail do escritório), cria a própria senha pelo link e já entra com o papel escolhido aqui. O link vale 1 hora; se vencer, ela usa "Esqueci minha senha" na entrada.
           </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_200px_auto] sm:items-end">
-            <Campo rotulo="E-mail do login">
+            <Campo rotulo="E-mail da pessoa">
               <input className="campo" type="email" required value={novo.email} onChange={(e) => setNovo({ ...novo, email: e.target.value })} />
             </Campo>
             <Campo rotulo="Nome">
@@ -172,7 +186,7 @@ export default function EquipeEAcessos({
               </select>
             </Campo>
             <button type="submit" disabled={salvando} className="botao-primario">
-              {salvando ? 'Liberando...' : 'Liberar acesso'}
+              {salvando ? 'Enviando convite...' : 'Enviar convite'}
             </button>
           </div>
         </form>

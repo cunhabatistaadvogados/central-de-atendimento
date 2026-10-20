@@ -110,6 +110,30 @@ export async function atualizarMembro(userId: string, campos: Partial<Pick<Membr
   if (error) throw new Error(error.message)
 }
 
+/**
+ * Cria o acesso de alguem da equipe: a funcao convidar-membro manda o convite
+ * por e-mail (remetente: Gmail do escritorio) e libera o papel. Se o e-mail ja
+ * tem login, so libera. Devolve se saiu convite novo.
+ */
+export async function convidarMembro(email: string, nome: string, papel: Papel): Promise<boolean> {
+  if (!supabase) throw new Error('Convite só funciona com o banco do escritório ligado.')
+  const voltar = `${window.location.origin}${window.location.pathname}`
+  const { data, error } = await supabase.functions.invoke('convidar-membro', { body: { email, nome, papel, voltar } })
+  if (error) {
+    // O corpo do erro da funcao traz o motivo real (ex.: SMTP recusou).
+    let motivo = error.message
+    try {
+      const corpo = await (error as { context?: Response }).context?.json()
+      if (corpo?.error) motivo = corpo.error
+    } catch {
+      // sem corpo legivel: fica a mensagem generica
+    }
+    throw new Error(motivo)
+  }
+  if (data?.error) throw new Error(data.error)
+  return Boolean(data?.convidado)
+}
+
 export async function adicionarMembro(email: string, nome: string, papel: Papel) {
   if (!supabase) return
   const { error } = await supabase.rpc('adicionar_membro', { p_email: email, p_nome: nome, p_papel: papel })
