@@ -1,6 +1,7 @@
 import type { Etapa } from '@motor/robo'
 import { Archive, CalendarRange, History, Loader2, MessagesSquare, Search, Smartphone, StickyNote, Undo2, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Avatar, ChipEtapa, PainelLateral, Vazio } from '@/components/ui'
 import { ETAPAS } from '@/lib/escritorio'
 import { carregarHistorico, carregarUmCliente, formatarTelefone, trazerParaOAtendimento, type ResumoHistorico } from '@/lib/repositorio'
@@ -23,6 +24,19 @@ const data = (iso: string | null, ano: '2-digit' | 'numeric' = '2-digit') =>
 
 const soDigitos = (s: string) => s.replace(/\D/g, '')
 
+const mes = (iso: string) => new Date(iso).toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')
+
+// "abr a out" cabe no cartao; com as datas inteiras o valor saia cortado.
+function periodo(de: string | null, ate: string | null) {
+  if (!de || !ate) return { valor: '-', detalhe: '' }
+  const [a, b] = [new Date(de).getFullYear(), new Date(ate).getFullYear()]
+  const valor = a === b ? `${mes(de)} a ${mes(ate)}` : `${mes(de)}/${String(a).slice(2)} a ${mes(ate)}/${String(b).slice(2)}`
+  return { valor, detalhe: `${data(de).slice(0, 5)} a ${data(ate, 'numeric')}` }
+}
+
+// Anexo do Pixel Hub e um link enorme: na lista basta saber que tem anexo.
+const previa = (texto: string) => texto.replace(/\[anexo\] \S+/g, '(anexo)')
+
 function Numero({ icone: I, rotulo, valor, detalhe }: { icone: typeof History; rotulo: string; valor: string; detalhe: string }) {
   return (
     <div className="cartao flex items-center gap-4 p-4 sm:p-5">
@@ -32,7 +46,7 @@ function Numero({ icone: I, rotulo, valor, detalhe }: { icone: typeof History; r
       <div className="min-w-0">
         <p className="rotulo text-slate-400">{rotulo}</p>
         <p className="titulo-serif mt-1 truncate text-[28px] leading-none text-marinho-900">{valor}</p>
-        <p className="mt-1 truncate text-xs text-slate-500">{detalhe}</p>
+        <p className="mt-1 text-xs leading-snug text-slate-500">{detalhe}</p>
       </div>
     </div>
   )
@@ -43,16 +57,17 @@ function ConversaAntiga({ id, onFechar, onTrazido }: { id: string; onFechar: () 
   const [erro, setErro] = useState('')
   const [confirmar, setConfirmar] = useState(false)
   const [trazendo, setTrazendo] = useState(false)
-  const fim = useRef<HTMLDivElement>(null)
+  const rolagem = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     carregarUmCliente(id)
       .then(setC)
       .catch((e: Error) => setErro(e.message))
   }, [id])
-  // Abre no fim, como no WhatsApp: a ultima mensagem e o que se procura.
+  // Abre no fim, como no WhatsApp: a ultima mensagem e o que se procura. Rola
+  // so a conversa; scrollIntoView rolava a pagina inteira por tras do painel.
   useEffect(() => {
-    fim.current?.scrollIntoView({ block: 'end' })
+    if (rolagem.current) rolagem.current.scrollTop = rolagem.current.scrollHeight
   }, [c])
 
   async function trazer() {
@@ -69,7 +84,9 @@ function ConversaAntiga({ id, onFechar, onTrazido }: { id: string; onFechar: () 
 
   const notas = c?.eventos.filter((e) => e.texto.startsWith('Nota no Pixel Hub') || e.texto.startsWith('Etiquetas no Pixel Hub')) ?? []
 
-  return (
+  // Portal: dentro da tela, a animacao de entrada (.entrar) virava referencia
+  // do position fixed e o painel abria no meio da pagina, nao colado no menu.
+  return createPortal(
     <PainelLateral aberto onFechar={onFechar}>
       <header className="relative overflow-hidden bg-marinho-900 px-5 pb-5 pt-5 text-white sm:px-7">
         <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-ouro-500/15 blur-3xl" />
@@ -97,7 +114,7 @@ function ConversaAntiga({ id, onFechar, onTrazido }: { id: string; onFechar: () 
         )}
       </header>
 
-      <div className="papel-whatsapp rolagem-fina flex-1 space-y-2 overflow-y-auto px-3 py-4 sm:px-6">
+      <div ref={rolagem} className="papel-whatsapp rolagem-fina flex-1 space-y-2 overflow-y-auto px-3 py-4 sm:px-6">
         {erro && <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{erro}</p>}
         {!c && !erro && (
           <p className="flex items-center justify-center gap-2 py-10 text-sm text-slate-400">
@@ -119,7 +136,6 @@ function ConversaAntiga({ id, onFechar, onTrazido }: { id: string; onFechar: () 
           </div>
         )}
         {c && <Bolhas mensagens={c.mensagens} />}
-        <div ref={fim} />
       </div>
 
       {/* Trazer de volta e para quando a equipe quer retomar um caso antigo sem
@@ -148,7 +164,8 @@ function ConversaAntiga({ id, onFechar, onTrazido }: { id: string; onFechar: () 
           )}
         </footer>
       )}
-    </PainelLateral>
+    </PainelLateral>,
+    document.body,
   )
 }
 
@@ -209,7 +226,7 @@ export default function Historico() {
       <div className="grid gap-3 sm:grid-cols-3">
         <Numero icone={MessagesSquare} rotulo="Conversas" valor={linhas ? nf(resumo.conversas) : '...'} detalhe="importadas do Pixel Hub" />
         <Numero icone={History} rotulo="Mensagens" valor={linhas ? nf(resumo.mensagens) : '...'} detalhe="clientes, equipe e a IA antiga" />
-        <Numero icone={CalendarRange} rotulo="Período" valor={linhas ? `${data(resumo.de)} a ${data(resumo.ate)}` : '...'} detalhe="até o número vir para o robô" />
+        <Numero icone={CalendarRange} rotulo="Período" valor={linhas ? periodo(resumo.de, resumo.ate).valor : '...'} detalhe={linhas ? periodo(resumo.de, resumo.ate).detalhe : 'até o número vir para o robô'} />
       </div>
 
       {aviso && (
@@ -290,7 +307,7 @@ export default function Historico() {
                         {l.ultima_texto ? (
                           <>
                             <span className="font-semibold text-slate-400">{l.ultima_de === 'cliente' ? 'Cliente: ' : 'Equipe: '}</span>
-                            {l.ultima_texto}
+                            {previa(l.ultima_texto)}
                           </>
                         ) : (
                           <span className="text-slate-400">sem mensagens</span>
