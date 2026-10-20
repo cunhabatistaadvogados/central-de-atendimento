@@ -13,6 +13,7 @@ import getpass
 import json
 import pathlib
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 
@@ -29,11 +30,42 @@ if not CHAVE:
 acao = sys.argv[1] if len(sys.argv) > 1 else ''
 if acao not in ('status', 'assinar', 'registrar'):
     sys.exit(__doc__)
+def pedir_pin(texto):
+    # No Windows mostra um * por digito: com o getpass a tela fica parada e
+    # parece que o teclado nao pegou.
+    try:
+        import msvcrt
+    except ImportError:
+        return getpass.getpass(texto).strip()
+    print(texto, end='', flush=True)
+    digitos = ''
+    while True:
+        c = msvcrt.getwch()
+        if c in '\r\n':
+            print()
+            return digitos
+        if c == '\x03':
+            raise KeyboardInterrupt
+        if c == '\b' and digitos:
+            digitos = digitos[:-1]
+            print('\b \b', end='', flush=True)
+        elif c.isdigit() and len(digitos) < 6:
+            digitos += c
+            print('*', end='', flush=True)
+
+
 corpo = {'acao': acao, 'telefone_id': TELEFONE_ID, 'conta_id': CONTA_ID}
 if acao == 'registrar':
-    pin = getpass.getpass('Crie o PIN de 6 digitos do numero (nao aparece enquanto digita): ').strip()
-    if pin != getpass.getpass('Repita o PIN: ').strip():
-        sys.exit('Os dois PINs nao batem. Nada foi enviado.')
+    for _ in range(3):
+        pin = pedir_pin('Digite o PIN de 6 numeros: ')
+        if len(pin) != 6:
+            print('O PIN precisa ter 6 numeros. Vamos de novo.\n')
+        elif pin != pedir_pin('Repita o PIN:            '):
+            print('Os dois nao bateram. Vamos de novo.\n')
+        else:
+            break
+    else:
+        sys.exit('Nada foi enviado.')
     corpo['pin'] = pin
 
 req = urllib.request.Request(f'{URL}/functions/v1/whatsapp-numero', data=json.dumps(corpo).encode(), method='POST')
@@ -41,6 +73,18 @@ req.add_header('Authorization', f'Bearer {CHAVE}')
 req.add_header('Content-Type', 'application/json')
 try:
     with urllib.request.urlopen(req, timeout=60) as r:
-        print(json.dumps(json.load(r), ensure_ascii=False, indent=2))
+        resultado = json.load(r)
 except urllib.error.HTTPError as e:
-    print('Erro', e.code, e.read().decode()[:600])
+    resultado = {'erro_da_funcao': e.code, 'texto': e.read().decode()[:600]}
+print(json.dumps(resultado, ensure_ascii=False, indent=2))
+
+if acao == 'registrar':
+    # A janela costuma ser fechada antes de alguem ler: a resposta da Meta (sem
+    # o PIN) fica num arquivo para conferir depois.
+    (pathlib.Path(tempfile.gettempdir()) / 'registro_whatsapp.json').write_text(json.dumps(resultado, ensure_ascii=False, indent=2), encoding='utf-8')
+    resposta = resultado.get('resposta') or {}
+    if resultado.get('http') == 200 and resposta.get('success') is True:
+        print('\nDEU CERTO: a Meta registrou o numero.')
+    else:
+        erro = resposta.get('error') or {}
+        print('\nNAO REGISTROU:', erro.get('error_user_msg') or erro.get('message') or resultado)
