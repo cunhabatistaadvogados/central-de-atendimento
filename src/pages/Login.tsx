@@ -50,7 +50,10 @@ export default function Login({ onEntrar }: { onEntrar: (s: Sessao) => void }) {
             tira o fundo, nao redesenha ninguem: rosto de gente de verdade nao
             pode sair alterado). Some em degrade na altura das coxas porque na
             foto os dois da direita estao atras de uma mesa, com perna e sapato
-            cortados retos. Ocupa a metade de baixo, o titulo fica em cima. */}
+            cortados retos. Ocupa a metade de baixo, o titulo fica em cima.
+            O nono, no canto direito, entrou depois (20/10/2026) a partir de
+            uma selfie: corpo virado para o centro gerado no Higgsfield e o
+            ROSTO DA FOTO REAL dele encaixado por cima. */}
         <img
           src={EQUIPE[VISUAL_DA_EQUIPE].src}
           alt=""
