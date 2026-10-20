@@ -1,10 +1,19 @@
 import { ArrowRight, Eye, Lock, Mail, ShieldCheck } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import type { Sessao } from '@/App'
-import equipe from '@/assets/equipe-branca.webp'
+import equipeBranca from '@/assets/equipe-branca.webp'
+import equipeCores from '@/assets/equipe-cores.webp'
 import logo from '@/assets/logo-cbaa.jpg'
 import { ESCRITORIO } from '@/lib/escritorio'
 import { supabase, supabaseConfigurado } from '@/lib/supabase'
+
+// As duas versoes da equipe na capa, para o escritorio escolher: as cores
+// reais da foto ou o branco transparente. Trocar e so mudar esta linha.
+const EQUIPE = {
+  cores: { src: equipeCores, classe: '' },
+  branca: { src: equipeBranca, classe: 'opacity-[0.28]' },
+}
+const VISUAL_DA_EQUIPE: keyof typeof EQUIPE = 'cores'
 
 export default function Login({ onEntrar }: { onEntrar: (s: Sessao) => void }) {
   const [email, setEmail] = useState('')
@@ -34,22 +43,21 @@ export default function Login({ onEntrar }: { onEntrar: (s: Sessao) => void }) {
     // fica abaixo de 400px, senao o formulario espreme em telas de 1280.
     // A capa anterior, sem a equipe, esta na tag git login-capa-antiga.
     <div className="grid min-h-dvh lg:grid-cols-[minmax(0,7fr)_minmax(400px,3fr)]">
-      <section className="relative hidden overflow-hidden bg-marinho-900 text-white lg:flex lg:flex-col lg:justify-between lg:p-14">
+      <section className="relative hidden overflow-hidden bg-marinho-900 text-white lg:flex lg:flex-col lg:p-12 xl:p-14">
         <div className="grade-suave absolute inset-0 opacity-50" />
         <div className="absolute -right-32 top-24 h-96 w-96 rounded-full bg-ouro-500/10 blur-3xl" />
-        {/* A equipe em branco transparente. Recorte da foto do site feito no
-            Higgsfield (so tira o fundo, nao redesenha ninguem: rosto de gente
-            de verdade nao pode sair alterado) e clareado aqui no projeto. A
-            mascara apaga os pes no navy, por baixo dos numeros. */}
+        {/* A equipe, da foto do site: ampliada e recortada no Higgsfield (so
+            tira o fundo, nao redesenha ninguem: rosto de gente de verdade nao
+            pode sair alterado). Some em degrade na altura das coxas porque na
+            foto os dois da direita estao atras de uma mesa, com perna e sapato
+            cortados retos. Ocupa a metade de baixo, o titulo fica em cima. */}
         <img
-          src={equipe}
+          src={EQUIPE[VISUAL_DA_EQUIPE].src}
           alt=""
           aria-hidden="true"
           draggable={false}
-          className="pointer-events-none absolute bottom-0 right-0 h-[80%] w-[98%] select-none object-contain object-right-bottom opacity-[0.28] [mask-image:linear-gradient(to_top,transparent,#000_30%)]"
+          className={`pointer-events-none absolute bottom-0 right-0 h-[56%] w-full select-none [@media(max-height:760px)]:h-[46%] [@media(max-height:680px)]:h-[40%] object-contain object-right-bottom ${EQUIPE[VISUAL_DA_EQUIPE].classe}`}
         />
-        {/* Veu da esquerda: o titulo fica legivel por cima da equipe. */}
-        <div className="pointer-events-none absolute inset-y-0 left-0 w-[48%] bg-gradient-to-r from-marinho-900/90 via-marinho-900/50 to-transparent" />
         <div className="relative flex items-center gap-4">
           <img src={logo} alt="CB& Advogados Associados" className="h-16 w-16 rounded-2xl shadow-[0_14px_30px_rgba(0,0,0,.35)]" />
           <div>
@@ -57,28 +65,32 @@ export default function Login({ onEntrar }: { onEntrar: (s: Sessao) => void }) {
             <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.24em] text-white/45">{ESCRITORIO.oab} · Santos/SP</p>
           </div>
         </div>
-        <div className="relative max-w-xl">
-          <p className="rotulo mb-5 text-ouro-400">Central de atendimento BPC/LOAS</p>
-          <h1 className="titulo-serif text-[56px] leading-[1.02]">
-            Cada família ouvida
-            <br />
-            no tempo <span className="text-ouro-400 italic">certo</span>.
-          </h1>
-          <p className="mt-6 max-w-md text-[15px] leading-relaxed text-white/60">
-            O robô acolhe e qualifica no WhatsApp a qualquer hora, a equipe assume no momento do fechamento e o contrato sai pronto ao final.
-          </p>
-        </div>
-        <div className="relative grid max-w-xl grid-cols-3 gap-4">
-          {[
-            ['24h', 'acolhimento no WhatsApp'],
-            ['1', 'pergunta por mensagem'],
-            ['1 clique', 'para o contrato'],
-          ].map(([n, t]) => (
-            <div key={t} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-              <p className="titulo-serif text-3xl text-ouro-400">{n}</p>
-              <p className="mt-1 text-[11px] leading-snug text-white/50">{t}</p>
-            </div>
-          ))}
+        {/* Titulo e numeros lado a lado, no alto: embaixo a equipe fica livre.
+            Os cartoes de numeros ficavam por cima das maos de cinco pessoas. */}
+        <div className="relative mt-14 flex items-start justify-between gap-10 [@media(max-height:820px)]:mt-8">
+          <div className="max-w-xl">
+            <p className="rotulo mb-5 text-ouro-400 [@media(max-height:820px)]:mb-3">Central de atendimento BPC/LOAS</p>
+            <h1 className="titulo-serif text-[52px] leading-[1.02] xl:text-[56px] [@media(max-height:820px)]:text-[44px]">
+              Cada família ouvida
+              <br />
+              no tempo <span className="text-ouro-400 italic">certo</span>.
+            </h1>
+            <p className="mt-6 max-w-md text-[15px] leading-relaxed text-white/60 [@media(max-height:820px)]:mt-4">
+              O robô acolhe e qualifica no WhatsApp a qualquer hora, a equipe assume no momento do fechamento e o contrato sai pronto ao final.
+            </p>
+          </div>
+          <dl className="hidden w-[190px] shrink-0 divide-y divide-white/10 border-l border-ouro-500/30 pl-6 xl:block">
+            {[
+              ['24h', 'acolhimento no WhatsApp'],
+              ['1', 'pergunta por mensagem'],
+              ['1 clique', 'para o contrato'],
+            ].map(([n, t]) => (
+              <div key={t} className="py-3 first:pt-1 last:pb-1">
+                <dt className="titulo-serif text-[30px] leading-none text-ouro-400">{n}</dt>
+                <dd className="mt-1.5 text-[11px] leading-snug text-white/50">{t}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
       </section>
 
