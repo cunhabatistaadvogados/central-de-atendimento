@@ -1,25 +1,13 @@
-import { ArrowLeft, Bot, CircleUser, Hand, MessagesSquare, PlayCircle, Search, Send, Smartphone, UserRound } from 'lucide-react'
+import { ArrowLeft, Bot, CircleUser, Hand, MessageCircle, MessagesSquare, PlayCircle, Search, Send, Smartphone, UserRound } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Avatar, ChipEtapa, ChipOrigem, Vazio } from '@/components/ui'
 import { desde, esperandoEquipe } from '@/lib/atendimento'
+import { etapa as infoEtapa, RESPOSTAS_PRONTAS } from '@/lib/escritorio'
 import { dataCurta, haQuanto, hora, mesmoDia } from '@/lib/formato'
+import { EVENTO_MODO_WHATSAPP, guardarVisual, useTelaDeCelular, visualGuardado } from '@/lib/modo-whatsapp'
 import { useDados } from '@/lib/store'
 import type { Cliente, Mensagem } from '@/lib/tipos'
-
-type Filtro = 'todas' | 'equipe' | 'robo'
-
-export const RESPOSTAS_PRONTAS = [
-  {
-    nome: 'Lista de documentos',
-    texto: 'Para o contrato e o pedido no INSS, me manda por aqui: foto do RG (frente e verso), CPF, comprovante de endereço e o CadÚnico. Se tiver, o laudo também.',
-  },
-  {
-    nome: 'Como assinar',
-    texto: 'O contrato chega aqui no seu WhatsApp, por um link do D4Sign. Você abre no celular, confere e assina com um clique. Não precisa imprimir nada.',
-  },
-  { nome: 'Confirmar reunião', texto: 'Confirmado: o Dr. André fala com você no horário combinado. Qualquer coisa, é só chamar aqui.' },
-  { nome: 'Quando pago?', texto: 'Só no final, quando o benefício sair. Antes disso você não paga nada ao escritório.' },
-]
+import { ConversaWhatsApp, ListaWhatsApp, type Filtro } from '@/sections/ConversasWhatsApp'
 
 function Balao({ m }: { m: Mensagem }) {
   const nosso = m.de !== 'cliente'
@@ -120,6 +108,21 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
   const [comoCliente, setComoCliente] = useState(false)
   const fim = useRef<HTMLDivElement>(null)
 
+  // Visual WhatsApp no celular: escolha lembrada no aparelho. O botao verde do
+  // cabecalho (Home) liga de fora, pelo evento.
+  const [visualWhatsApp, setVisualWhatsApp] = useState(visualGuardado)
+  const telaDeCelular = useTelaDeCelular()
+  const telaWhats = visualWhatsApp && telaDeCelular
+  const trocarVisual = (whatsapp: boolean) => {
+    guardarVisual(whatsapp)
+    setVisualWhatsApp(whatsapp)
+  }
+  useEffect(() => {
+    const ligar = () => setVisualWhatsApp(true)
+    window.addEventListener(EVENTO_MODO_WHATSAPP, ligar)
+    return () => window.removeEventListener(EVENTO_MODO_WHATSAPP, ligar)
+  }, [])
+
   useEffect(() => {
     if (foco) {
       setSelecionado(foco)
@@ -139,9 +142,20 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
   const qtdEquipe = clientes.filter(esperandoEquipe).length
 
   useEffect(() => {
-    fim.current?.scrollIntoView({ block: 'end' })
+    // Rola so a caixa das mensagens. O scrollIntoView de antes rolava a
+    // pagina inteira junto e, no celular, jogava o campo para tras do menu.
+    const caixa = fim.current?.parentElement
+    if (caixa) caixa.scrollTop = caixa.scrollHeight
     if (atual?.naoLidas) marcarLido(atual.id)
   }, [atual?.id, atual?.mensagens.length, atual?.naoLidas, marcarLido])
+
+  // Conversa aberta no celular, visual padrao: a pagina para com o cartao
+  // logo abaixo do cabecalho, e ele ocupa ate o menu flutuante. O topo da
+  // conversa fica parado e so as mensagens rolam (pedido do Edu, 19/10/2026).
+  const cartao = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (atual?.id && telaDeCelular && !visualWhatsApp) cartao.current?.scrollIntoView({ block: 'start' })
+  }, [atual?.id, telaDeCelular, visualWhatsApp])
 
   async function enviar() {
     const t = texto.trim()
@@ -164,8 +178,49 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
     }
   }
 
+  if (telaWhats) {
+    return atual ? (
+      <ConversaWhatsApp
+        c={atual}
+        demonstracao={demonstracao}
+        texto={texto}
+        setTexto={setTexto}
+        enviando={enviando}
+        erroEnvio={erroEnvio}
+        limparErro={() => setErroEnvio('')}
+        comoCliente={comoCliente}
+        setComoCliente={setComoCliente}
+        enviar={enviar}
+        onVoltar={() => setSelecionado(null)}
+        onVisualPadrao={() => trocarVisual(false)}
+        abrirCliente={abrirCliente}
+        religar={() => religarRobo(atual.id)}
+        pausar={() => pausarRobo(atual.id, `${autor} pausou o robô`)}
+      />
+    ) : (
+      <ListaWhatsApp
+        lista={lista}
+        busca={busca}
+        setBusca={setBusca}
+        filtro={filtro}
+        setFiltro={setFiltro}
+        qtdEquipe={qtdEquipe}
+        demonstracao={demonstracao}
+        onAbrir={setSelecionado}
+        onChatNormal={() => trocarVisual(false)}
+      />
+    )
+  }
+
   return (
-    <div className="cartao flex h-[calc(100dvh-230px)] min-h-[560px] overflow-hidden p-0 lg:h-[calc(100dvh-210px)]">
+    // 166px = cabecalho do celular (66) + menu flutuante (84) + 8 de folga em
+    // cima e embaixo, medidos numa tela de 375x812.
+    <div
+      ref={cartao}
+      className={`cartao flex scroll-mt-[74px] overflow-hidden p-0 lg:h-[calc(100dvh-210px)] lg:min-h-[560px] ${
+        atual ? 'h-[calc(100dvh-166px-env(safe-area-inset-bottom))] min-h-[420px]' : 'h-[calc(100dvh-230px)] min-h-[560px]'
+      }`}
+    >
       <div className={`flex w-full flex-col border-r border-marinho-900/[0.06] md:w-[340px] md:shrink-0 ${atual ? 'hidden md:flex' : 'flex'}`}>
         <div className="space-y-3 border-b border-marinho-900/[0.06] p-4">
           <div className="relative">
@@ -197,37 +252,71 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
 
       {atual ? (
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex flex-wrap items-center gap-3 border-b border-marinho-900/[0.06] px-4 py-3">
-            <button type="button" onClick={() => setSelecionado(null)} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 md:hidden" aria-label="Voltar">
+          {/* Uma linha so, em qualquer largura: no celular o "Religar robo"
+              quebrava em duas linhas e o cabecalho comia a conversa (print do
+              Edu de 19/10/2026). Etapa e origem cedem lugar primeiro. */}
+          <div className="flex items-center gap-1.5 border-b border-marinho-900/[0.06] px-2 py-2.5 sm:gap-3 sm:px-4 sm:py-3">
+            <button type="button" onClick={() => setSelecionado(null)} className="shrink-0 rounded-xl p-2 text-slate-500 hover:bg-slate-100 md:hidden" aria-label="Voltar">
               <ArrowLeft className="h-4 w-4" />
             </button>
-            <button type="button" onClick={() => abrirCliente(atual.id)} className="flex min-w-0 items-center gap-3 text-left">
+            <button type="button" onClick={() => abrirCliente(atual.id)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left sm:gap-3">
               <Avatar nome={atual.nome || atual.telefone} />
               <span className="min-w-0">
-                <span className="block truncate text-sm font-extrabold hover:underline">{atual.nome || 'Sem nome ainda'}</span>
-                <span className="flex items-center gap-1.5 text-[11px] text-slate-400">
-                  <Smartphone className="h-3 w-3" /> {atual.telefone} <ChipOrigem origem={atual.origem} />
+                <span className="block truncate text-sm font-extrabold hover:underline">
+                  {atual.nome || (
+                    <>
+                      <span className="sm:hidden">{atual.telefone}</span>
+                      <span className="hidden sm:inline">Sem nome ainda</span>
+                    </>
+                  )}
+                </span>
+                {/* No celular so cabe a etapa; o telefone fica na ficha. */}
+                <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-slate-400">
+                  <Smartphone className="hidden h-3 w-3 shrink-0 sm:block" />
+                  <span className="hidden truncate sm:inline">{atual.telefone}</span>
+                  <span className="hidden sm:inline">
+                    <ChipOrigem origem={atual.origem} />
+                  </span>
+                  <span className="truncate font-semibold text-slate-500 sm:hidden">{infoEtapa(atual.etapa).nome}</span>
                 </span>
               </span>
             </button>
-            <div className="ml-auto flex items-center gap-2">
-              <ChipEtapa etapa={atual.etapa} compacto />
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+              <span className="hidden sm:inline-flex">
+                <ChipEtapa etapa={atual.etapa} compacto />
+              </span>
               {atual.robo.pausado ? (
-                <button type="button" onClick={() => religarRobo(atual.id)} className="botao-claro py-1.5 text-xs" title="O robô volta a responder sozinho">
-                  <PlayCircle className="h-4 w-4 text-emerald-600" /> Religar robô
+                <button type="button" onClick={() => religarRobo(atual.id)} className="botao-claro whitespace-nowrap px-2.5 py-1.5 text-xs sm:px-4" title="O robô volta a responder sozinho">
+                  <PlayCircle className="h-4 w-4 text-emerald-600" />
+                  <span>
+                    Religar<span className="hidden sm:inline"> robô</span>
+                  </span>
                 </button>
               ) : (
-                <button type="button" onClick={() => pausarRobo(atual.id, `${autor} pausou o robô`)} className="botao-claro py-1.5 text-xs">
+                <button type="button" onClick={() => pausarRobo(atual.id, `${autor} pausou o robô`)} className="botao-claro whitespace-nowrap px-2.5 py-1.5 text-xs sm:px-4">
                   <Hand className="h-4 w-4 text-ouro-600" /> Assumir
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => trocarVisual(true)}
+                aria-label="Abrir no modo WhatsApp"
+                title="Modo WhatsApp: conversa em tela cheia"
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#1daa61] text-white lg:hidden"
+              >
+                <MessageCircle className="h-[18px] w-[18px]" />
+              </button>
             </div>
           </div>
 
           <div className={`flex items-center gap-2 px-4 py-2 text-[11px] font-semibold ${atual.robo.pausado ? 'bg-ouro-50 text-ouro-700' : 'bg-emerald-50 text-emerald-700'}`}>
-            {atual.robo.pausado ? <CircleUser className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}
-            {atual.robo.pausado ? `Equipe no comando · ${atual.robo.motivoPausa ?? ''}` : 'Robô atendendo · responde sozinho e passa para a equipe na hora certa'}
-            {esperandoEquipe(atual) && <span className="ml-auto rounded-full bg-ouro-500 px-2 py-0.5 text-[10px] font-extrabold text-marinho-950">esperando {haQuanto(desde(atual)).replace('há ', '')}</span>}
+            {atual.robo.pausado ? <CircleUser className="h-3.5 w-3.5 shrink-0" /> : <Bot className="h-3.5 w-3.5 shrink-0" />}
+            <span className="min-w-0 flex-1 truncate">
+              {atual.robo.pausado ? `Equipe no comando · ${atual.robo.motivoPausa ?? ''}` : 'Robô atendendo · responde sozinho e passa para a equipe na hora certa'}
+            </span>
+            {esperandoEquipe(atual) && (
+              <span className="shrink-0 whitespace-nowrap rounded-full bg-ouro-500 px-2 py-0.5 text-[10px] font-extrabold text-marinho-950">esperando {haQuanto(desde(atual)).replace('há ', '')}</span>
+            )}
           </div>
 
           <div className="papel-whatsapp rolagem-fina flex-1 space-y-2 overflow-y-auto px-3 py-4 sm:px-6">
@@ -254,7 +343,7 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
                   }
                 }}
                 rows={1}
-                placeholder={comoCliente ? 'Escreva como se fosse o cliente (teste)' : atual.robo.pausado ? 'Responder como equipe' : 'Responder como equipe (o robô pausa nesta conversa)'}
+                placeholder={comoCliente ? 'Escreva como o cliente (teste)' : atual.robo.pausado ? 'Responder como equipe' : 'Responder (pausa o robô)'}
                 className={`campo max-h-32 min-h-[44px] resize-none ${comoCliente ? 'border-sky-300 bg-sky-50' : ''}`}
               />
               <button

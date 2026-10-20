@@ -6,6 +6,7 @@ import {
   Columns3,
   FileSignature,
   LogOut,
+  MessageCircle,
   MessagesSquare,
   Settings2,
   ShieldCheck,
@@ -17,6 +18,7 @@ import type { Sessao } from '@/App'
 import { ArteDoMenu, MarcaHorizontal, SeloCB } from '@/components/Marca'
 import { esperandoEquipe } from '@/lib/atendimento'
 import { hojeExtenso, mesmoDia } from '@/lib/formato'
+import { ligarModoWhatsApp } from '@/lib/modo-whatsapp'
 import { useDados } from '@/lib/store'
 import QuemEstaOnline from '@/components/QuemEstaOnline'
 import { PAPEIS, useConfigQuemEstaOnline, useQuemEstaOnline } from '@/lib/equipe'
@@ -203,8 +205,23 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             {membro && quemEstaOnlineLigado && <QuemEstaOnline online={online} compacto />}
+            {/* Modo WhatsApp (igual ao do Marcello): leva as Conversas ja em
+                tela cheia, lista e conversa como no app. "Chat normal", la
+                dentro, volta ao visual de sempre. */}
+            <button
+              type="button"
+              onClick={() => {
+                ligarModoWhatsApp()
+                irPara('conversas')
+              }}
+              aria-label="Abrir as conversas no modo WhatsApp"
+              title="Modo WhatsApp"
+              className="pulso-whatsapp flex h-10 w-10 items-center justify-center rounded-xl bg-[#1daa61] text-white"
+            >
+              <MessageCircle className="h-[19px] w-[19px]" />
+            </button>
             <button type="button" onClick={onSair} aria-label="Sair" className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.07] text-white/60">
               <LogOut className="h-[18px] w-[18px]" />
             </button>

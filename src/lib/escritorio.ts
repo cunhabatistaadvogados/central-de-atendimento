@@ -38,6 +38,20 @@ export const HONORARIOS = [
   },
 ]
 
+/** Atalhos da equipe na conversa (visual padrao e visual WhatsApp). */
+export const RESPOSTAS_PRONTAS = [
+  {
+    nome: 'Lista de documentos',
+    texto: 'Para o contrato e o pedido no INSS, me manda por aqui: foto do RG (frente e verso), CPF, comprovante de endereço e o CadÚnico. Se tiver, o laudo também.',
+  },
+  {
+    nome: 'Como assinar',
+    texto: 'O contrato chega aqui no seu WhatsApp, por um link do D4Sign. Você abre no celular, confere e assina com um clique. Não precisa imprimir nada.',
+  },
+  { nome: 'Confirmar reunião', texto: 'Confirmado: o Dr. André fala com você no horário combinado. Qualquer coisa, é só chamar aqui.' },
+  { nome: 'Quando pago?', texto: 'Só no final, quando o benefício sair. Antes disso você não paga nada ao escritório.' },
+]
+
 /**
  * Etapas e cores com significado fixo (Visual Law do CRM do Lucas):
  * novo azul, qualificacao roxo, qualificado dourado, reuniao laranja,
