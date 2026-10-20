@@ -124,6 +124,14 @@ export default function Login({ onEntrar }: { onEntrar: (s: Sessao) => void }) {
               ? 'Conexão protegida. Os dados dos clientes ficam no banco do escritório, com acesso só para a equipe.'
               : 'Banco do escritório ainda não ligado nesta cópia: a demonstração guarda tudo só neste navegador.'}
           </p>
+          <p className="mt-4 flex gap-4 text-[11px] font-semibold">
+            <a href="./politica-de-privacidade.html" className="text-ouro-700 hover:underline">
+              Política de privacidade
+            </a>
+            <a href="./exclusao-de-dados.html" className="text-ouro-700 hover:underline">
+              Exclusão de dados
+            </a>
+          </p>
         </div>
       </section>
     </div>
