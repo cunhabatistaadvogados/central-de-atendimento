@@ -82,6 +82,8 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
   const irPara = (a: Aba) => {
     setAba(a)
     setMaisAberto(false)
+    // A ficha abre colada no menu: clicar no menu troca de tela e fecha a ficha.
+    setFichaAberta(null)
     window.scrollTo({ top: 0 })
   }
 

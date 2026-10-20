@@ -54,7 +54,11 @@ export function Interruptor({ ligado, onChange, rotulo }: { ligado: boolean; onC
   )
 }
 
-/** Painel que desliza da direita (ficha do cliente). No celular ocupa a tela. */
+/**
+ * Painel da ficha do cliente. Abre pela ESQUERDA, colado no menu (pedido do
+ * Edu em 19/10/2026): o menu continua visivel e a lista fica a direita, por
+ * baixo do veu. No celular ocupa a tela.
+ */
 export function PainelLateral({ aberto, onFechar, children, largura = 'max-w-3xl' }: { aberto: boolean; onFechar: () => void; children: ReactNode; largura?: string }) {
   useEffect(() => {
     if (!aberto) return
@@ -69,9 +73,9 @@ export function PainelLateral({ aberto, onFechar, children, largura = 'max-w-3xl
   }, [aberto, onFechar])
   if (!aberto) return null
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className="fixed inset-y-0 left-0 right-0 z-50 flex justify-start lg:left-[286px]">
       <button type="button" aria-label="Fechar" onClick={onFechar} className="absolute inset-0 cursor-default bg-marinho-950/40 backdrop-blur-[2px]" />
-      <div className={`entrar relative flex h-full w-full ${largura} flex-col bg-papel shadow-flutuante`}>{children}</div>
+      <div className={`entrar relative flex h-full w-full ${largura} flex-col border-r border-marinho-900/10 bg-papel shadow-flutuante`}>{children}</div>
     </div>
   )
 }
