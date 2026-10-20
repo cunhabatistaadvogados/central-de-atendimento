@@ -1,25 +1,24 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Etapa } from '@motor/robo'
 import { enviarComoEquipe, id, novoCliente, rascunhoDoContrato, receberDoCliente } from './atendimento'
 import { baseDeDemonstracao } from './dados-demo'
 import { etapa as infoEtapa } from './escritorio'
+import { carregarClientes, enviarResposta, gravarDiferenca } from './repositorio'
+import { supabase } from './supabase'
 import type { Base, Cliente, Contrato, Documentos, Origem } from './tipos'
 
 /**
- * Estado do sistema. Nesta primeira versao os dados vivem neste navegador
- * (modo demonstracao). A troca para o Supabase acontece aqui e so aqui: as
- * telas falam com estas acoes e nao sabem onde o dado mora.
+ * Estado do sistema, em dois modos:
+ * - DEMONSTRACAO (botao "Ver a demonstracao" no login): 14 familias
+ *   ficticias guardadas so neste navegador.
+ * - REAL (login da equipe): dados do Supabase. Cada acao muda a tela na hora
+ *   e grava a diferenca no banco logo depois; mensagem nova chega pelo
+ *   Realtime. Ate 19/10/2026 o login real ainda mostrava a demonstracao, o
+ *   que confundiu o Edu no primeiro acesso ("esses dados sao reais?").
  */
 const CHAVE = 'cbaa:base:v1'
 
-/**
- * Enquanto for true, ate quem entra com senha ve os dados ficticios deste
- * navegador, e a tela mostra o selo de demonstracao para ninguem tomar o
- * exemplo por cliente de verdade. Vira false quando o store ler do Supabase.
- */
-export const DADOS_NO_NAVEGADOR = true
-
-function carregar(): Base {
+function carregarDemonstracao(): Base {
   try {
     const bruto = localStorage.getItem(CHAVE)
     if (bruto) {
@@ -32,12 +31,17 @@ function carregar(): Base {
   return baseDeDemonstracao()
 }
 
-interface Acoes {
+export interface Acoes {
+  demonstracao: boolean
+  carregando: boolean
+  erro: string
+  recarregar: () => void
   base: Base
   clientes: Cliente[]
   cliente: (id: string) => Cliente | undefined
+  /** So na demonstracao: escrever como se fosse o cliente. */
   receber: (id: string, texto: string) => void
-  responder: (id: string, texto: string, autor: string) => void
+  responder: (id: string, texto: string, autor: string) => Promise<void>
   novoContato: (telefone: string, origem: Origem, primeiraMensagem: string) => string
   pausarRobo: (id: string, motivo: string) => void
   religarRobo: (id: string) => void
@@ -53,8 +57,64 @@ interface Acoes {
 
 const Contexto = createContext<Acoes | null>(null)
 
-export function ProvedorDeDados({ children }: { children: ReactNode }) {
-  const [base, setBase] = useState<Base>(carregar)
+const agora = () => new Date().toISOString()
+const ev = (tipo: Cliente['eventos'][number]['tipo'], texto: string) => ({ id: id(), tipo, texto, em: agora() })
+
+/** As transformacoes sao as mesmas nos dois modos; so muda onde o resultado mora. */
+function transformacoes(mudar: (cid: string, fn: (c: Cliente) => Cliente) => void) {
+  return {
+    pausarRobo: (cid: string, motivo: string) =>
+      mudar(cid, (c) => ({ ...c, robo: { ...c.robo, pausado: true, motivoPausa: motivo }, eventos: [...c.eventos, ev('equipe', `Robô pausado: ${motivo}`)] })),
+    religarRobo: (cid: string) =>
+      mudar(cid, (c) => ({
+        ...c,
+        robo: { ...c.robo, pausado: false, motivoPausa: undefined, encaminhado: false },
+        eventos: [...c.eventos, ev('equipe', 'Robô religado pela equipe')],
+      })),
+    moverEtapa: (cid: string, etapa: Etapa, autor: string, motivoPerda?: string) =>
+      mudar(cid, (c) => ({
+        ...c,
+        etapa,
+        motivoPerda: etapa === 'perdido' ? motivoPerda : undefined,
+        contrato: etapa === 'reuniao' || etapa === 'contrato' ? (c.contrato ?? rascunhoDoContrato(c)) : c.contrato,
+        eventos: [...c.eventos, ev('etapa', `${autor} moveu para ${infoEtapa(etapa).nome}${motivoPerda ? ` (${motivoPerda})` : ''}`)],
+      })),
+    marcarLido: (cid: string) => mudar(cid, (c) => (c.naoLidas ? { ...c, naoLidas: 0 } : c)),
+    salvarContrato: (cid: string, contrato: Contrato) =>
+      mudar(cid, (c) => {
+        const eventos = [...c.eventos]
+        if (c.contrato?.status !== contrato.status) {
+          const nomes = { rascunho: 'em rascunho', pronto: 'pronto para envio', enviado: 'enviado para assinatura', assinado: 'assinado' }
+          eventos.push(ev('contrato', `Contrato ${nomes[contrato.status]}`))
+        }
+        let etapa = c.etapa
+        if (contrato.status === 'enviado' && !['contrato', 'contratado'].includes(c.etapa)) etapa = 'contrato'
+        if (contrato.status === 'assinado') etapa = 'contratado'
+        return { ...c, contrato, etapa, eventos }
+      }),
+    documentos: (cid: string, docs: Documentos) => mudar(cid, (c) => ({ ...c, documentos: docs })),
+    resolverPendencia: (cid: string, pid: string) =>
+      mudar(cid, (c) => ({
+        ...c,
+        pendencias: c.pendencias.map((p) => (p.id === pid ? { ...p, resolvida: true } : p)),
+        eventos: [...c.eventos, ev('equipe', `Pendência resolvida: ${c.pendencias.find((p) => p.id === pid)?.texto ?? ''}`)],
+      })),
+    confirmarReuniao: (cid: string, data: string, autor: string) =>
+      mudar(cid, (c) => ({
+        ...c,
+        etapa: ['novo', 'qualificacao', 'qualificado'].includes(c.etapa) ? 'reuniao' : c.etapa,
+        reuniao: { quando: c.reuniao?.quando ?? '', advogado: c.reuniao?.advogado ?? 'Dr. André', data, confirmada: true },
+        contrato: c.contrato ?? rascunhoDoContrato(c),
+        eventos: [...c.eventos, ev('equipe', `${autor} confirmou a reunião para ${new Date(data).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`)],
+      })),
+    atualizarCliente: (cid: string, campos: Partial<Pick<Cliente, 'nome' | 'telefone' | 'cidade' | 'responsavel'>>) => mudar(cid, (c) => ({ ...c, ...campos })),
+  }
+}
+
+const ordenar = (lista: Cliente[]) => [...lista].sort((a, b) => b.atualizadoEm.localeCompare(a.atualizadoEm))
+
+function ProvedorDemonstracao({ children }: { children: ReactNode }) {
+  const [base, setBase] = useState<Base>(carregarDemonstracao)
 
   useEffect(() => {
     try {
@@ -68,73 +128,136 @@ export function ProvedorDeDados({ children }: { children: ReactNode }) {
     setBase((b) => ({ ...b, clientes: b.clientes.map((c) => (c.id === cid ? fn(c) : c)) }))
   }, [])
 
-  const agora = () => new Date().toISOString()
-  const ev = (tipo: Cliente['eventos'][number]['tipo'], texto: string) => ({ id: id(), tipo, texto, em: agora() })
-
   const acoes = useMemo<Acoes>(
     () => ({
+      demonstracao: true,
+      carregando: false,
+      erro: '',
+      recarregar: () => {},
       base,
-      clientes: [...base.clientes].sort((a, b) => b.atualizadoEm.localeCompare(a.atualizadoEm)),
+      clientes: ordenar(base.clientes),
       cliente: (cid) => base.clientes.find((c) => c.id === cid),
       receber: (cid, texto) => mudar(cid, (c) => receberDoCliente(c, texto, agora())),
-      responder: (cid, texto, autor) => mudar(cid, (c) => enviarComoEquipe(c, texto, autor, agora())),
+      responder: async (cid, texto, autor) => mudar(cid, (c) => enviarComoEquipe(c, texto, autor, agora())),
       novoContato: (telefone, origem, primeira) => {
         const c = receberDoCliente(novoCliente(telefone, origem, agora()), primeira, agora())
         setBase((b) => ({ ...b, clientes: [c, ...b.clientes] }))
         return c.id
       },
-      pausarRobo: (cid, motivo) =>
-        mudar(cid, (c) => ({ ...c, robo: { ...c.robo, pausado: true, motivoPausa: motivo }, eventos: [...c.eventos, ev('equipe', `Robô pausado: ${motivo}`)] })),
-      religarRobo: (cid) =>
-        mudar(cid, (c) => ({
-          ...c,
-          robo: { ...c.robo, pausado: false, motivoPausa: undefined, encaminhado: false },
-          eventos: [...c.eventos, ev('equipe', 'Robô religado pela equipe')],
-        })),
-      moverEtapa: (cid, etapa, autor, motivoPerda) =>
-        mudar(cid, (c) => ({
-          ...c,
-          etapa,
-          motivoPerda: etapa === 'perdido' ? motivoPerda : undefined,
-          contrato: etapa === 'reuniao' || etapa === 'contrato' ? (c.contrato ?? rascunhoDoContrato(c)) : c.contrato,
-          eventos: [...c.eventos, ev('etapa', `${autor} moveu para ${infoEtapa(etapa).nome}${motivoPerda ? ` (${motivoPerda})` : ''}`)],
-        })),
-      marcarLido: (cid) => mudar(cid, (c) => (c.naoLidas ? { ...c, naoLidas: 0 } : c)),
-      salvarContrato: (cid, contrato) =>
-        mudar(cid, (c) => {
-          const antes = c.contrato?.status
-          const eventos = [...c.eventos]
-          if (antes !== contrato.status) {
-            const nomes = { rascunho: 'em rascunho', pronto: 'pronto para envio', enviado: 'enviado para assinatura', assinado: 'assinado' }
-            eventos.push(ev('contrato', `Contrato ${nomes[contrato.status]}`))
-          }
-          let etapa = c.etapa
-          if (contrato.status === 'enviado' && !['contrato', 'contratado'].includes(c.etapa)) etapa = 'contrato'
-          if (contrato.status === 'assinado') etapa = 'contratado'
-          return { ...c, contrato, etapa, eventos }
-        }),
-      documentos: (cid, docs) => mudar(cid, (c) => ({ ...c, documentos: docs })),
-      resolverPendencia: (cid, pid) =>
-        mudar(cid, (c) => ({
-          ...c,
-          pendencias: c.pendencias.map((p) => (p.id === pid ? { ...p, resolvida: true } : p)),
-          eventos: [...c.eventos, ev('equipe', `Pendência resolvida: ${c.pendencias.find((p) => p.id === pid)?.texto ?? ''}`)],
-        })),
-      confirmarReuniao: (cid, data, autor) =>
-        mudar(cid, (c) => ({
-          ...c,
-          etapa: ['novo', 'qualificacao', 'qualificado'].includes(c.etapa) ? 'reuniao' : c.etapa,
-          reuniao: { quando: c.reuniao?.quando ?? '', advogado: c.reuniao?.advogado ?? 'Dr. André', data, confirmada: true },
-          contrato: c.contrato ?? rascunhoDoContrato(c),
-          eventos: [...c.eventos, ev('equipe', `${autor} confirmou a reunião para ${new Date(data).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`)],
-        })),
-      atualizarCliente: (cid, campos) => mudar(cid, (c) => ({ ...c, ...campos })),
+      ...transformacoes(mudar),
       recomecarDemonstracao: () => setBase(baseDeDemonstracao()),
     }),
     [base, mudar],
   )
-
   return <Contexto.Provider value={acoes}>{children}</Contexto.Provider>
+}
+
+const ESPERA_PARA_GRAVAR_MS = 600
+
+function ProvedorReal({ children }: { children: ReactNode }) {
+  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [carregando, setCarregando] = useState(true)
+  const [erro, setErro] = useState('')
+  const atual = useRef<Cliente[]>([])
+  // Edicoes ainda nao gravadas: o "antes" do primeiro toque e o ultimo "depois".
+  const pendentes = useRef(new Map<string, { antes: Cliente; timer: number }>())
+
+  const aplicar = useCallback((lista: Cliente[]) => {
+    atual.current = lista
+    setClientes(lista)
+  }, [])
+
+  const recarregar = useCallback(() => {
+    carregarClientes()
+      .then((lista) => {
+        // Cliente com edicao em andamento fica com a versao da tela ate gravar.
+        const mescla = lista.map((c) => (pendentes.current.has(c.id) ? (atual.current.find((x) => x.id === c.id) ?? c) : c))
+        aplicar(mescla)
+        setErro('')
+      })
+      .catch((e: Error) => setErro(e.message))
+      .finally(() => setCarregando(false))
+  }, [aplicar])
+
+  useEffect(() => {
+    recarregar()
+    if (!supabase) return
+    let timer = 0
+    const depois = () => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(recarregar, 400)
+    }
+    const canal = supabase
+      .channel('dados-da-central')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'mensagens' }, depois)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes' }, depois)
+      .subscribe()
+    // Rede de seguranca: se o Realtime cair, a tela ainda se atualiza.
+    const periodico = window.setInterval(recarregar, 60000)
+    return () => {
+      window.clearTimeout(timer)
+      window.clearInterval(periodico)
+      void supabase?.removeChannel(canal)
+    }
+  }, [recarregar])
+
+  const gravar = useCallback(
+    (cid: string) => {
+      const p = pendentes.current.get(cid)
+      const depois = atual.current.find((c) => c.id === cid)
+      pendentes.current.delete(cid)
+      if (!p || !depois) return
+      gravarDiferenca(p.antes, depois).catch((e: Error) => {
+        setErro(e.message)
+        recarregar()
+      })
+    },
+    [recarregar],
+  )
+
+  const mudar = useCallback(
+    (cid: string, fn: (c: Cliente) => Cliente) => {
+      const velho = atual.current.find((c) => c.id === cid)
+      if (!velho) return
+      const novo = fn(velho)
+      if (novo === velho) return
+      aplicar(atual.current.map((c) => (c.id === cid ? novo : c)))
+      const p = pendentes.current.get(cid)
+      if (p) window.clearTimeout(p.timer)
+      pendentes.current.set(cid, { antes: p?.antes ?? velho, timer: window.setTimeout(() => gravar(cid), ESPERA_PARA_GRAVAR_MS) })
+    },
+    [aplicar, gravar],
+  )
+
+  const acoes = useMemo<Acoes>(
+    () => ({
+      demonstracao: false,
+      carregando,
+      erro,
+      recarregar,
+      base: { versao: 1, clientes, ultimaGeracao: agora() },
+      clientes: ordenar(clientes),
+      cliente: (cid) => clientes.find((c) => c.id === cid),
+      receber: () => {
+        throw new Error('Escrever como o cliente só existe na demonstração.')
+      },
+      responder: async (cid, texto) => {
+        await enviarResposta(cid, texto)
+        recarregar()
+      },
+      novoContato: () => {
+        throw new Error('Contato novo chega pelo WhatsApp, não pela tela.')
+      },
+      ...transformacoes(mudar),
+      recomecarDemonstracao: () => {},
+    }),
+    [clientes, carregando, erro, recarregar, mudar],
+  )
+  return <Contexto.Provider value={acoes}>{children}</Contexto.Provider>
+}
+
+export function ProvedorDeDados({ demonstracao, children }: { demonstracao: boolean; children: ReactNode }) {
+  return demonstracao ? <ProvedorDemonstracao>{children}</ProvedorDemonstracao> : <ProvedorReal>{children}</ProvedorReal>
 }
 
 export function useDados(): Acoes {

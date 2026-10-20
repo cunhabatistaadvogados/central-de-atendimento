@@ -38,7 +38,7 @@ export default function Preferencias({
   quemEstaOnline: boolean
   aoMudarQuemEstaOnline: (v: boolean) => void
 }) {
-  const { recomecarDemonstracao } = useDados()
+  const { recomecarDemonstracao, demonstracao } = useDados()
   const [confirmando, setConfirmando] = useState(false)
 
   const integracoes = [
@@ -161,6 +161,7 @@ export default function Preferencias({
         </section>
       </div>
 
+      {demonstracao && (
       <section className="cartao flex flex-wrap items-center gap-4 p-6">
         <Building2 className="h-6 w-6 text-ouro-600" />
         <div className="min-w-0 flex-1">
@@ -171,6 +172,7 @@ export default function Preferencias({
           <RotateCcw className="h-4 w-4" /> Recomeçar demonstração
         </button>
       </section>
+      )}
 
       <Modal aberto={confirmando} onFechar={() => setConfirmando(false)} titulo="Recomeçar a demonstração?">
         <p className="text-sm text-slate-600">As conversas e contratos de teste que você mexeu voltam ao início. Não afeta nenhum dado real.</p>

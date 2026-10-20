@@ -3,8 +3,9 @@ import { dadosVazios } from './contrato'
 import { ESCRITORIO, etapa as infoEtapa } from './escritorio'
 import type { Cliente, Contrato, Evento, Mensagem, Origem } from './tipos'
 
+/** uuid: o mesmo id serve na demonstracao e como chave no banco real. */
 export function id(): string {
-  return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)
+  return crypto.randomUUID()
 }
 
 function evento(tipo: Evento['tipo'], texto: string, em: string): Evento {

@@ -90,7 +90,7 @@ export default function App() {
   if (!sessao) return <Login onEntrar={entrar} />
   if (!sessao.demonstracao && !sessao.membro?.ativo) return <AcessoPendente sessao={sessao} onSair={sair} />
   return (
-    <ProvedorDeDados>
+    <ProvedorDeDados demonstracao={sessao.demonstracao}>
       <Home sessao={sessao} onSair={sair} />
     </ProvedorDeDados>
   )

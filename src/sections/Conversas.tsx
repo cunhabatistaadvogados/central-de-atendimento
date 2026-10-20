@@ -37,7 +37,19 @@ function Balao({ m }: { m: Mensagem }) {
           </p>
         )}
         {m.texto}
-        <span className="ml-2 inline-block translate-y-1 text-[10px] text-slate-400">{hora(m.em)}</span>
+        <span className="ml-2 inline-block translate-y-1 text-[10px] text-slate-400">
+          {hora(m.em)}
+          {nosso && m.statusEnvio === 'read' && <span className="ml-1 text-sky-500">✓✓</span>}
+          {nosso && m.statusEnvio === 'delivered' && <span className="ml-1">✓✓</span>}
+          {nosso && m.statusEnvio === 'sent' && <span className="ml-1">✓</span>}
+        </span>
+        {/* Falha silenciosa e pior que falha barulhenta: mensagem que a Meta
+            recusou ganha etiqueta vermelha com o motivo, na propria conversa. */}
+        {m.statusEnvio === 'failed' && (
+          <p className="mt-1.5 rounded-lg bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700">
+            Não foi entregue{m.erroEnvio ? `: ${m.erroEnvio}` : ''}
+          </p>
+        )}
       </div>
     </div>
   )
@@ -98,7 +110,9 @@ function ItemDaLista({ c, ativo, onClick }: { c: Cliente; ativo: boolean; onClic
 }
 
 export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { foco: string | null; limparFoco: () => void; abrirCliente: (id: string) => void; autor: string }) {
-  const { clientes, responder, receber, religarRobo, pausarRobo, marcarLido } = useDados()
+  const { clientes, responder, receber, religarRobo, pausarRobo, marcarLido, demonstracao } = useDados()
+  const [enviando, setEnviando] = useState(false)
+  const [erroEnvio, setErroEnvio] = useState('')
   const [filtro, setFiltro] = useState<Filtro>('todas')
   const [busca, setBusca] = useState('')
   const [selecionado, setSelecionado] = useState<string | null>(foco)
@@ -129,12 +143,25 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
     if (atual?.naoLidas) marcarLido(atual.id)
   }, [atual?.id, atual?.mensagens.length, atual?.naoLidas, marcarLido])
 
-  function enviar() {
+  async function enviar() {
     const t = texto.trim()
-    if (!t || !atual) return
-    if (comoCliente) receber(atual.id, t)
-    else responder(atual.id, t, autor)
-    setTexto('')
+    if (!t || !atual || enviando) return
+    setErroEnvio('')
+    if (comoCliente && demonstracao) {
+      receber(atual.id, t)
+      setTexto('')
+      return
+    }
+    setEnviando(true)
+    try {
+      await responder(atual.id, t, autor)
+      setTexto('')
+    } catch (e) {
+      // O texto fica na caixa para tentar de novo; o motivo aparece embaixo.
+      setErroEnvio(e instanceof Error ? e.message : 'Não foi possível enviar.')
+    } finally {
+      setEnviando(false)
+    }
   }
 
   return (
@@ -223,21 +250,32 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
-                    enviar()
+                    void enviar()
                   }
                 }}
                 rows={1}
                 placeholder={comoCliente ? 'Escreva como se fosse o cliente (teste)' : atual.robo.pausado ? 'Responder como equipe' : 'Responder como equipe (o robô pausa nesta conversa)'}
                 className={`campo max-h-32 min-h-[44px] resize-none ${comoCliente ? 'border-sky-300 bg-sky-50' : ''}`}
               />
-              <button type="button" onClick={enviar} disabled={!texto.trim()} className={comoCliente ? 'botao bg-sky-600 text-white hover:bg-sky-700' : 'botao-primario'} aria-label="Enviar">
-                <Send className="h-4 w-4" />
+              <button
+                type="button"
+                onClick={() => void enviar()}
+                disabled={!texto.trim() || enviando}
+                className={comoCliente && demonstracao ? 'botao bg-sky-600 text-white hover:bg-sky-700' : 'botao-primario'}
+                aria-label="Enviar"
+              >
+                {enviando ? <span className="text-xs">Enviando...</span> : <Send className="h-4 w-4" />}
               </button>
             </div>
-            <label className="mt-2 flex w-fit cursor-pointer items-center gap-2 text-[11px] font-semibold text-slate-400">
-              <input type="checkbox" checked={comoCliente} onChange={(e) => setComoCliente(e.target.checked)} className="accent-sky-600" />
-              Demonstração: escrever como o cliente para ver o robô responder
-            </label>
+            {erroEnvio && <p className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{erroEnvio}</p>}
+            {demonstracao ? (
+              <label className="mt-2 flex w-fit cursor-pointer items-center gap-2 text-[11px] font-semibold text-slate-400">
+                <input type="checkbox" checked={comoCliente} onChange={(e) => setComoCliente(e.target.checked)} className="accent-sky-600" />
+                Demonstração: escrever como o cliente para ver o robô responder
+              </label>
+            ) : (
+              <p className="mt-2 text-[11px] text-slate-400">Sai pelo WhatsApp oficial do escritório. Fora das 24h depois da última mensagem do cliente, a Meta só aceita modelo aprovado.</p>
+            )}
           </div>
         </div>
       ) : (

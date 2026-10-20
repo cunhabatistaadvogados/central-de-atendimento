@@ -10,6 +10,9 @@ export interface Mensagem {
   texto: string
   em: string
   autor?: string
+  /** So no modo real: sent, delivered, read ou failed (vem da Meta). */
+  statusEnvio?: string
+  erroEnvio?: string
 }
 
 export interface Pendencia {

@@ -17,7 +17,7 @@ import type { Sessao } from '@/App'
 import { ArteDoMenu, MarcaHorizontal, SeloCB } from '@/components/Marca'
 import { esperandoEquipe } from '@/lib/atendimento'
 import { hojeExtenso, mesmoDia } from '@/lib/formato'
-import { DADOS_NO_NAVEGADOR, useDados } from '@/lib/store'
+import { useDados } from '@/lib/store'
 import QuemEstaOnline from '@/components/QuemEstaOnline'
 import { PAPEIS, useConfigQuemEstaOnline, useQuemEstaOnline } from '@/lib/equipe'
 import Agenda from '@/sections/Agenda'
@@ -56,7 +56,7 @@ const META: Record<Aba, { olho: string; titulo: string; sub: string }> = {
 }
 
 export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () => void }) {
-  const { clientes } = useDados()
+  const { clientes, erro: erroDosDados, carregando, recarregar, demonstracao } = useDados()
   const membro = sessao.membro ?? null
   const [quemEstaOnlineLigado, setQuemEstaOnlineLigado] = useConfigQuemEstaOnline(Boolean(membro))
   const online = useQuemEstaOnline(membro, quemEstaOnlineLigado)
@@ -104,7 +104,7 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
         <div className="relative flex h-full flex-col">
           <div className="px-6 pb-6 pt-8 [@media(max-height:820px)]:pb-4 [@media(max-height:820px)]:pt-5">
             <MarcaHorizontal />
-            {(sessao.demonstracao || DADOS_NO_NAVEGADOR) && (
+            {sessao.demonstracao && (
               <p className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-ouro-500/30 bg-ouro-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-ouro-300">
                 <Sparkles className="h-3 w-3" /> Modo demonstração
               </p>
@@ -186,7 +186,13 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
               <p className="titulo-serif text-lg">
                 Cunha Batista <span className="text-ouro-400">&amp;</span>
               </p>
-              <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.2em] text-white/40">Central de atendimento</p>
+              {/* No celular o menu lateral some: o selo de demonstracao vem para
+                  o cabecalho, senao ficticio passa por real. */}
+              {sessao.demonstracao ? (
+                <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.2em] text-ouro-300">Modo demonstração</p>
+              ) : (
+                <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.2em] text-white/40">Central de atendimento</p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -216,6 +222,15 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
             <p className="text-xs font-semibold text-slate-400">{hojeExtenso()}</p>
           </div>
 
+          {erroDosDados && (
+            <div className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <span className="font-semibold">{erroDosDados}</span>
+              <button type="button" onClick={recarregar} className="botao-claro ml-auto py-1.5 text-xs">
+                Tentar de novo
+              </button>
+            </div>
+          )}
+          {!demonstracao && carregando && <p className="mb-5 text-sm text-slate-400">Carregando os atendimentos do banco do escritório...</p>}
           <div key={aba} className="entrar">
             {aba === 'visao' && <VisaoGeral abrirCliente={abrirCliente} irPara={irPara} />}
             {aba === 'conversas' && <Conversas foco={conversaFoco} limparFoco={() => setConversaFoco(null)} abrirCliente={abrirCliente} autor={sessao.nome} />}

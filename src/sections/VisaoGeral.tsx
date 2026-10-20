@@ -27,7 +27,7 @@ function Indicador({ icone: I, rotulo, valor, detalhe, destaque = false }: { ico
 }
 
 export default function VisaoGeral({ abrirCliente, irPara }: { abrirCliente: (id: string) => void; irPara: (a: Aba) => void }) {
-  const { clientes } = useDados()
+  const { clientes, demonstracao } = useDados()
   const total = clientes.length || 1
   const ativos = clientes.filter((c) => c.etapa !== 'perdido')
   const qualificados = clientes.filter((c) => ['qualificado', 'reuniao', 'contrato', 'contratado'].includes(c.etapa))
@@ -169,7 +169,7 @@ export default function VisaoGeral({ abrirCliente, irPara }: { abrirCliente: (id
               )
             })}
           </div>
-          <p className="relative mt-5 text-[10px] leading-relaxed text-white/35">Na demonstração os números saem das conversas fictícias. Com o WhatsApp ligado, passam a ser os reais.</p>
+          <p className="relative mt-5 text-[10px] leading-relaxed text-white/35">{demonstracao ? 'Na demonstração os números saem das conversas fictícias.' : 'Números das conversas reais que chegaram pelo WhatsApp.'}</p>
         </section>
 
         <section className="cartao p-6">
