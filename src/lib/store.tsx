@@ -3,7 +3,7 @@ import type { Etapa } from '@motor/robo'
 import { enviarComoEquipe, id, novoCliente, rascunhoDoContrato, receberDoCliente } from './atendimento'
 import { baseDeDemonstracao } from './dados-demo'
 import { etapa as infoEtapa } from './escritorio'
-import { carregarClientes, enviarResposta, gravarDiferenca } from './repositorio'
+import { carregarClientes, carregarUmCliente, enviarResposta, gravarDiferenca } from './repositorio'
 import { supabase } from './supabase'
 import type { Base, Cliente, Contrato, Documentos, Origem } from './tipos'
 
@@ -179,27 +179,53 @@ function ProvedorReal({ children }: { children: ReactNode }) {
       .finally(() => setCarregando(false))
   }, [aplicar])
 
+  // So o cliente que mudou: com o historico do Pixel Hub a base passou de 22
+  // mil mensagens, e reler tudo a cada mensagem nova pesava em cada aba aberta.
+  const atualizarUm = useCallback(
+    (cid: string) => {
+      carregarUmCliente(cid)
+        .then((c) => {
+          if (pendentes.current.has(cid)) return // edicao em andamento: a tela manda ate gravar
+          const lista = atual.current
+          if (!c) return aplicar(lista.filter((x) => x.id !== cid))
+          aplicar(lista.some((x) => x.id === cid) ? lista.map((x) => (x.id === cid ? c : x)) : [c, ...lista])
+        })
+        .catch((e: Error) => setErro(e.message))
+    },
+    [aplicar],
+  )
+
   useEffect(() => {
     recarregar()
     if (!supabase) return
     let timer = 0
-    const depois = () => {
+    const mudou = new Set<string>()
+    const depois = (cid: string | undefined) => {
+      if (!cid) return
+      mudou.add(cid)
       window.clearTimeout(timer)
-      timer = window.setTimeout(recarregar, 400)
+      timer = window.setTimeout(() => {
+        const ids = [...mudou]
+        mudou.clear()
+        // Muita coisa de uma vez (importacao, por exemplo): uma leitura so.
+        if (ids.length > 20) recarregar()
+        else ids.forEach(atualizarUm)
+      }, 400)
     }
+    type Linha = { id?: string; cliente_id?: string }
     const canal = supabase
       .channel('dados-da-central')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'mensagens' }, depois)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes' }, depois)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'mensagens' }, (p) => depois(((p.new as Linha)?.cliente_id ?? (p.old as Linha)?.cliente_id)))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes' }, (p) => depois(((p.new as Linha)?.id ?? (p.old as Linha)?.id)))
       .subscribe()
     // Rede de seguranca: se o Realtime cair, a tela ainda se atualiza.
-    const periodico = window.setInterval(recarregar, 60000)
+    const periodico = window.setInterval(recarregar, 5 * 60000)
     return () => {
       window.clearTimeout(timer)
       window.clearInterval(periodico)
       void supabase?.removeChannel(canal)
     }
-  }, [recarregar])
+  }, [recarregar, atualizarUm])
 
   const gravar = useCallback(
     (cid: string) => {
@@ -243,7 +269,7 @@ function ProvedorReal({ children }: { children: ReactNode }) {
       },
       responder: async (cid, texto) => {
         await enviarResposta(cid, texto)
-        recarregar()
+        atualizarUm(cid)
       },
       novoContato: () => {
         throw new Error('Contato novo chega pelo WhatsApp, não pela tela.')
@@ -251,7 +277,7 @@ function ProvedorReal({ children }: { children: ReactNode }) {
       ...transformacoes(mudar),
       recomecarDemonstracao: () => {},
     }),
-    [clientes, carregando, erro, recarregar, mudar],
+    [clientes, carregando, erro, recarregar, mudar, atualizarUm],
   )
   return <Contexto.Provider value={acoes}>{children}</Contexto.Provider>
 }

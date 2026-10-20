@@ -63,6 +63,10 @@ export default function Funil({ abrirCliente, autor }: { abrirCliente: (id: stri
   const { clientes, moverEtapa } = useDados()
   const [sobre, setSobre] = useState<Etapa | null>(null)
   const [perdendo, setPerdendo] = useState<string | null>(null)
+  // Com o historico do Pixel Hub uma coluna passou de 1.400 cartoes: a tela
+  // travava desenhando todos. Mostra os mais recentes e abre mais sob pedido.
+  const [mostrar, setMostrar] = useState<Partial<Record<Etapa, number>>>({})
+  const LOTE = 30
 
   function soltar(e: DragEvent, etapa: Etapa) {
     e.preventDefault()
@@ -96,9 +100,18 @@ export default function Funil({ abrirCliente, autor }: { abrirCliente: (id: stri
                 <span className="ml-auto rounded-full bg-white px-2 py-0.5 text-[11px] font-extrabold text-slate-500 shadow-sm">{daEtapa.length}</span>
               </header>
               <div className="flex min-h-[120px] flex-1 flex-col gap-2.5">
-                {daEtapa.map((c) => (
+                {daEtapa.slice(0, mostrar[e.chave] ?? LOTE).map((c) => (
                   <Cartao key={c.id} c={c} onAbrir={() => abrirCliente(c.id)} />
                 ))}
+                {daEtapa.length > (mostrar[e.chave] ?? LOTE) && (
+                  <button
+                    type="button"
+                    onClick={() => setMostrar((m) => ({ ...m, [e.chave]: (m[e.chave] ?? LOTE) + LOTE }))}
+                    className="rounded-2xl border border-dashed border-marinho-900/15 py-2.5 text-[11px] font-bold text-marinho-700 transition hover:bg-white"
+                  >
+                    Mostrar mais {Math.min(LOTE, daEtapa.length - (mostrar[e.chave] ?? LOTE))} (faltam {daEtapa.length - (mostrar[e.chave] ?? LOTE)})
+                  </button>
+                )}
                 {daEtapa.length === 0 && <p className="rounded-2xl border border-dashed border-slate-200 py-8 text-center text-[11px] text-slate-300">Arraste para cá</p>}
               </div>
             </section>

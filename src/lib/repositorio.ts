@@ -57,29 +57,85 @@ function exigir() {
   return supabase
 }
 
-export async function carregarClientes(): Promise<Cliente[]> {
-  const db = exigir()
-  const [cl, ms, pe, ev, co] = await Promise.all([
-    db.from('clientes').select('*').order('atualizado_em', { ascending: false }),
-    db.from('mensagens').select('id, cliente_id, de, texto, autor, em, status_envio, erro_envio').order('em'),
-    db.from('pendencias').select('*').order('criada_em'),
-    db.from('eventos').select('*').order('em'),
-    db.from('contratos').select('*'),
-  ])
-  // Falha alta e clara: tela vazia por erro silencioso ja custou caro no Marcello.
-  for (const r of [cl, ms, pe, ev, co]) if (r.error) throw new Error(`Não consegui ler o banco: ${r.error.message}`)
+type Resposta<T> = PromiseLike<{ data: T[] | null; error: { message: string } | null; count?: number | null }>
+const PAGINA = 1000
 
+/**
+ * Le a tabela INTEIRA em paginas de 1000. O Supabase corta qualquer consulta
+ * em 1000 linhas: com o historico do Pixel Hub (22 mil mensagens, 20/10/2026)
+ * a tela mostraria so as 1000 mais antigas, sem erro nenhum. Conta primeiro e
+ * busca as paginas em paralelo; a ordem tem desempate por id para nenhuma
+ * linha cair entre duas paginas.
+ */
+async function todas<T>(tabela: string, colunas: string, ordem: string, filtro?: (q: any) => any): Promise<T[]> {
+  const db = exigir()
+  const base = () => {
+    // contratos nao tem coluna id: a chave e o cliente_id.
+    const q = db.from(tabela).select(colunas, { count: 'exact' }).order(ordem).order(tabela === 'contratos' ? 'cliente_id' : 'id')
+    return filtro ? filtro(q) : q
+  }
+  const primeira = (await base().range(0, PAGINA - 1)) as Awaited<Resposta<T>>
+  if (primeira.error) throw new Error(`Não consegui ler o banco (${tabela}): ${primeira.error.message}`)
+  const total = primeira.count ?? (primeira.data?.length ?? 0)
+  const linhas = [...(primeira.data ?? [])]
+  const resto: Promise<Awaited<Resposta<T>>>[] = []
+  for (let de = PAGINA; de < total; de += PAGINA) resto.push(Promise.resolve(base().range(de, de + PAGINA - 1)) as Promise<Awaited<Resposta<T>>>)
+  for (const r of await Promise.all(resto)) {
+    if (r.error) throw new Error(`Não consegui ler o banco (${tabela}): ${r.error.message}`)
+    linhas.push(...(r.data ?? []))
+  }
+  return linhas
+}
+
+const COLUNAS_MENSAGEM = 'id, cliente_id, de, texto, autor, em, status_envio, erro_envio'
+
+export async function carregarClientes(): Promise<Cliente[]> {
+  // Falha alta e clara: tela vazia por erro silencioso ja custou caro no Marcello.
+  const [cl, ms, pe, ev, co] = await Promise.all([
+    todas<LinhaCliente>('clientes', '*', 'atualizado_em'),
+    todas<Record<string, string> & { cliente_id: string }>('mensagens', COLUNAS_MENSAGEM, 'em'),
+    todas<Record<string, unknown> & { cliente_id: string }>('pendencias', '*', 'criada_em'),
+    todas<Record<string, string> & { cliente_id: string }>('eventos', '*', 'em'),
+    todas<LinhaContrato>('contratos', '*', 'atualizado_em'),
+  ])
+  return montarClientes(cl.reverse(), ms, pe, ev, co)
+}
+
+/** So um cliente: o tempo real atualiza quem mudou, sem reler a base inteira. */
+export async function carregarUmCliente(id: string): Promise<Cliente | null> {
+  const doCliente = (q: any) => q.eq('cliente_id', id)
+  const [cl, ms, pe, ev, co] = await Promise.all([
+    todas<LinhaCliente>('clientes', '*', 'atualizado_em', (q) => q.eq('id', id)),
+    todas<Record<string, string> & { cliente_id: string }>('mensagens', COLUNAS_MENSAGEM, 'em', doCliente),
+    todas<Record<string, unknown> & { cliente_id: string }>('pendencias', '*', 'criada_em', doCliente),
+    todas<Record<string, string> & { cliente_id: string }>('eventos', '*', 'em', doCliente),
+    todas<LinhaContrato>('contratos', '*', 'atualizado_em', doCliente),
+  ])
+  return montarClientes(cl, ms, pe, ev, co)[0] ?? null
+}
+
+function montarClientes(
+  cl: LinhaCliente[],
+  ms: (Record<string, string> & { cliente_id: string })[],
+  pe: (Record<string, unknown> & { cliente_id: string })[],
+  ev: (Record<string, string> & { cliente_id: string })[],
+  co: LinhaContrato[],
+): Cliente[] {
   const porCliente = <T extends { cliente_id: string }>(linhas: T[]) => {
     const mapa = new Map<string, T[]>()
-    for (const l of linhas) mapa.set(l.cliente_id, [...(mapa.get(l.cliente_id) ?? []), l])
+    for (const l of linhas) {
+      const lista = mapa.get(l.cliente_id)
+      if (lista) lista.push(l)
+      else mapa.set(l.cliente_id, [l])
+    }
     return mapa
   }
-  const mensagens = porCliente((ms.data ?? []) as (Record<string, string> & { cliente_id: string })[])
-  const pendencias = porCliente((pe.data ?? []) as (Record<string, unknown> & { cliente_id: string })[])
-  const eventos = porCliente((ev.data ?? []) as (Record<string, string> & { cliente_id: string })[])
-  const contratos = new Map(((co.data ?? []) as LinhaContrato[]).map((c) => [c.cliente_id, c]))
+  const mensagens = porCliente(ms)
+  const pendencias = porCliente(pe)
+  const eventos = porCliente(ev)
+  const contratos = new Map(co.map((c) => [c.cliente_id, c]))
 
-  return ((cl.data ?? []) as LinhaCliente[]).map((l) => {
+  return cl.map((l) => {
     const robo = { ...novoEstado(), ...(l.robo ?? {}) } as EstadoRobo
     robo.ficha = { ...(l.robo?.ficha ?? {}) }
     const k = contratos.get(l.id)
