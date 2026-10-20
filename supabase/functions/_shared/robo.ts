@@ -869,9 +869,20 @@ export function responder(estadoAnterior: EstadoRobo, mensagem: string, agora: D
   return { respostas, estado, sinais }
 }
 
-/** Retornos automaticos (regua). {NOME} e {PENDENCIA} como no CRM do Lucas. */
+/**
+ * Retornos automaticos (regua). {NOME} e {PENDENCIA} como no CRM do Lucas.
+ *
+ * O de 23h sem resposta cai DENTRO da janela de 24h do WhatsApp: vai como
+ * texto livre. O de pendencia cai fora (3 a 7 dias): so sai como modelo
+ * aprovado pela Meta. O texto abaixo e o do modelo "retorno_pendencia"
+ * (Utilidade, pt_BR) enviado em 19/10/2026. A primeira versao, "Passando para
+ * saber como esta", a Meta avisou que rejeitaria como Utilidade e cobraria
+ * como Marketing: por isso fala em "atualizacao do seu atendimento". Mudar
+ * este texto exige mandar um modelo novo para aprovacao.
+ */
 export const FOLLOWUP_SEM_RESPOSTA = 'Oi, {NOME}! Vi que você chamou sobre o BPC/LOAS e a gente não terminou de conversar. Quer continuar daqui?'
-export const FOLLOWUP_PENDENCIA = 'Oi, {NOME}, tudo bem? Passando para saber como está: {PENDENCIA}. Conseguiu resolver ou precisa de uma orientação?'
+export const MODELO_RETORNO_PENDENCIA = 'retorno_pendencia'
+export const FOLLOWUP_PENDENCIA = 'Olá, {NOME}. Atualização do seu atendimento de BPC/LOAS com o escritório Cunha Batista: ainda está pendente {PENDENCIA}. Você conseguiu resolver ou precisa de ajuda da equipe?'
 
 export function preencherFollowup(modelo: string, nome: string | undefined, pendencia = ''): string {
   return modelo.replace('{NOME}', primeiroNome(nome) || 'tudo bem').replace('{PENDENCIA}', pendencia)
