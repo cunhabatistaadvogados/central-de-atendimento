@@ -1,5 +1,6 @@
 import { ArrowLeft, Bot, CircleUser, Hand, MessageCircle, MessagesSquare, PlayCircle, Search, Send, Smartphone, UserRound } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { BotaoAnexar, BotaoResponder, Citacao, FaixaDoEnvio, MidiaDaMensagem, podeCitar, previaDaMensagem, textoSemMidia, useArrastarParaResponder } from '@/components/Midia'
 import { Avatar, ChipEtapa, ChipOrigem, Vazio } from '@/components/ui'
 import { desde, esperandoEquipe } from '@/lib/atendimento'
 import { etapa as infoEtapa, RESPOSTAS_PRONTAS } from '@/lib/escritorio'
@@ -9,22 +10,28 @@ import { useDados } from '@/lib/store'
 import type { Cliente, Mensagem } from '@/lib/tipos'
 import { ConversaWhatsApp, ListaWhatsApp, type Filtro } from '@/sections/ConversasWhatsApp'
 
-function Balao({ m }: { m: Mensagem }) {
+function Balao({ m, mensagens, nomeDoCliente, onResponder }: { m: Mensagem; mensagens: Mensagem[]; nomeDoCliente: string; onResponder?: (m: Mensagem) => void }) {
   const nosso = m.de !== 'cliente'
+  const responder = onResponder && podeCitar(m) ? () => onResponder(m) : undefined
+  const arrastar = useArrastarParaResponder(responder)
   return (
-    <div className={`flex ${nosso ? 'justify-end' : 'justify-start'}`}>
+    <div id={`msg-${m.id}`} className={`flex ${nosso ? 'justify-end' : 'justify-start'}`}>
       <div
-        className={`relative max-w-[82%] whitespace-pre-line rounded-2xl px-3.5 py-2 text-[13.5px] leading-relaxed shadow-[0_1px_1px_rgba(0,0,0,.06)] sm:max-w-[68%] ${
+        {...arrastar}
+        className={`group relative max-w-[82%] whitespace-pre-line rounded-2xl px-3.5 py-2 text-[13.5px] leading-relaxed shadow-[0_1px_1px_rgba(0,0,0,.06)] sm:max-w-[68%] ${
           m.de === 'cliente' ? 'rounded-tl-md bg-white text-marinho-900' : m.de === 'robo' ? 'rounded-tr-md bg-marinho-100 text-marinho-900' : 'rounded-tr-md bg-ouro-100 text-marinho-900'
         }`}
       >
+        {responder && <BotaoResponder onClick={responder} lado={nosso ? 'esquerda' : 'direita'} />}
         {nosso && (
           <p className={`mb-0.5 flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-[0.12em] ${m.de === 'robo' ? 'text-marinho-600' : 'text-ouro-700'}`}>
             {m.de === 'robo' ? <Bot className="h-3 w-3" /> : <UserRound className="h-3 w-3" />}
-            {m.de === 'robo' ? 'Robô CB&AA' : m.autor}
+            {m.de === 'robo' ? 'Mary CB&AA' : m.autor}
           </p>
         )}
-        {m.texto}
+        <Citacao m={m} mensagens={mensagens} nomeDoCliente={nomeDoCliente} />
+        <MidiaDaMensagem m={m} />
+        {textoSemMidia(m)}
         <span className="ml-2 inline-block translate-y-1 text-[10px] text-slate-400">
           {hora(m.em)}
           {nosso && m.statusEnvio === 'read' && <span className="ml-1 text-sky-500">✓✓</span>}
@@ -43,7 +50,7 @@ function Balao({ m }: { m: Mensagem }) {
   )
 }
 
-export function Bolhas({ mensagens }: { mensagens: Mensagem[] }) {
+export function Bolhas({ mensagens, nomeDoCliente = '', onResponder }: { mensagens: Mensagem[]; nomeDoCliente?: string; onResponder?: (m: Mensagem) => void }) {
   let diaAnterior = ''
   return (
     <>
@@ -60,7 +67,7 @@ export function Bolhas({ mensagens }: { mensagens: Mensagem[] }) {
                 </span>
               </div>
             )}
-            <Balao m={m} />
+            <Balao m={m} mensagens={mensagens} nomeDoCliente={nomeDoCliente} onResponder={onResponder} />
           </div>
         )
       })}
@@ -85,7 +92,7 @@ function ItemDaLista({ c, ativo, onClick }: { c: Cliente; ativo: boolean; onClic
         </span>
         <span className={`mt-0.5 flex items-center gap-1.5 text-xs ${ativo ? 'text-white/60' : 'text-slate-500'}`}>
           {ultima?.de === 'robo' && <Bot className="h-3 w-3 shrink-0" />}
-          <span className="truncate">{ultima?.texto}</span>
+          <span className="truncate">{ultima && previaDaMensagem(ultima)}</span>
         </span>
       </span>
       {espera ? (
@@ -141,6 +148,15 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
   const atual = clientes.find((c) => c.id === selecionado) ?? null
   const qtdEquipe = clientes.filter(esperandoEquipe).length
 
+  // Resposta citada e arquivo valem so para a conversa em que foram escolhidos:
+  // trocar de conversa nao leva a citacao junto.
+  const [citada, setCitada] = useState<{ cid: string; m: Mensagem } | null>(null)
+  const [anexo, setAnexo] = useState<{ cid: string; f: File } | null>(null)
+  const respondendo = citada && citada.cid === atual?.id ? citada.m : null
+  const arquivo = anexo && anexo.cid === atual?.id ? anexo.f : null
+  const responderA = (m: Mensagem) => atual && setCitada({ cid: atual.id, m })
+  const escolherArquivo = (f: File) => atual && setAnexo({ cid: atual.id, f })
+
   useEffect(() => {
     // Rola so a caixa das mensagens. O scrollIntoView de antes rolava a
     // pagina inteira junto e, no celular, jogava o campo para tras do menu.
@@ -159,17 +175,20 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
 
   async function enviar() {
     const t = texto.trim()
-    if (!t || !atual || enviando) return
+    if ((!t && !arquivo) || !atual || enviando) return
     setErroEnvio('')
     if (comoCliente && demonstracao) {
+      if (!t) return
       receber(atual.id, t)
       setTexto('')
       return
     }
     setEnviando(true)
     try {
-      await responder(atual.id, t, autor)
+      await responder(atual.id, t, autor, { respondeA: respondendo?.wamid, arquivo: arquivo ?? undefined })
       setTexto('')
+      setCitada(null)
+      setAnexo(null)
     } catch (e) {
       // O texto fica na caixa para tentar de novo; o motivo aparece embaixo.
       setErroEnvio(e instanceof Error ? e.message : 'Não foi possível enviar.')
@@ -191,6 +210,12 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
         comoCliente={comoCliente}
         setComoCliente={setComoCliente}
         enviar={enviar}
+        respondendo={respondendo}
+        onResponder={demonstracao ? undefined : responderA}
+        onCancelarResposta={() => setCitada(null)}
+        arquivo={arquivo}
+        onEscolherArquivo={demonstracao ? undefined : escolherArquivo}
+        onTirarArquivo={() => setAnexo(null)}
         onVoltar={() => setSelecionado(null)}
         onVisualPadrao={() => trocarVisual(false)}
         abrirCliente={abrirCliente}
@@ -320,7 +345,7 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
           </div>
 
           <div className="papel-whatsapp rolagem-fina flex-1 space-y-2 overflow-y-auto px-3 py-4 sm:px-6">
-            <Bolhas mensagens={atual.mensagens} />
+            <Bolhas mensagens={atual.mensagens} nomeDoCliente={atual.nome} onResponder={demonstracao ? undefined : responderA} />
             <div ref={fim} />
           </div>
 
@@ -332,7 +357,17 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
                 </button>
               ))}
             </div>
+            <FaixaDoEnvio
+              respondendo={respondendo}
+              nomeDoCliente={atual.nome}
+              onCancelarResposta={() => setCitada(null)}
+              arquivo={arquivo}
+              onTirarArquivo={() => setAnexo(null)}
+            />
             <div className="flex items-end gap-2">
+              {!demonstracao && (
+                <BotaoAnexar onEscolher={escolherArquivo} className="mb-[3px] shrink-0 rounded-xl p-2.5 text-slate-500 hover:bg-slate-100" />
+              )}
               <textarea
                 value={texto}
                 onChange={(e) => setTexto(e.target.value)}
@@ -349,7 +384,7 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
               <button
                 type="button"
                 onClick={() => void enviar()}
-                disabled={!texto.trim() || enviando}
+                disabled={(!texto.trim() && !arquivo) || enviando}
                 className={comoCliente && demonstracao ? 'botao bg-sky-600 text-white hover:bg-sky-700' : 'botao-primario'}
                 aria-label="Enviar"
               >

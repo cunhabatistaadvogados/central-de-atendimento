@@ -646,6 +646,13 @@ caso('F11: pensao contada sem dizer de quem: "Quem recebe?", sem perguntar de no
   assert.match(responder(c.estado, 'ela mesma', SEGUNDA_10H).respostas[0], /^Como ela já recebe um benefício/)
 })
 
+caso('teste do Edu: "boa tarde" no meio nao vira "nao entendi" e o nome dito nao e pedido de novo', () => {
+  const c = conversa(['Oi, quero saber do LOAS do idoso', 'Boa tarde', 'Teste'])
+  assert.equal(c.robo[1][0], 'Boa tarde! Me conta seu nome e quantos anos tem a pessoa que precisa do benefício?')
+  assert.equal(c.ficha.nome, 'Teste')
+  assert.equal(c.ultima, 'Prazer, Teste. Quantos anos tem a pessoa que precisa do benefício?')
+})
+
 caso('F01: "loas de idosa" no meio da conversa nao faz do irmao autista um idoso', () => {
   const c = conversa(['oi, é pro meu irmao, ele é autista', 'Camila, ele tem 30', 'tem, de 2024', 'precisa de ajuda', 'sus', 'sim', 'somos 3', 'minha mae recebe o loas de idosa 1621'])
   assert.equal(c.ficha.area, undefined)

@@ -989,7 +989,8 @@ function textoDaPergunta(p: Pergunta, f: Ficha, agora: Date): string {
       if (f.origem === 'site') return 'Me conta seu nome e o que está acontecendo: é benefício do INSS para você ou para alguém da família?'
       return 'Me conta seu nome e para quem seria o benefício?'
     case 'nome_idade':
-      if (!f.para) return 'Me conta seu nome e quantos anos tem a pessoa que precisa do benefício?'
+      // Idoso sem saber para quem: o nome ja dito nao e pedido de novo (teste do Edu, 21/10/2026).
+      if (!f.para) return f.nome ? 'Quantos anos tem a pessoa que precisa do benefício?' : 'Me conta seu nome e quantos anos tem a pessoa que precisa do benefício?'
       return proprio ? 'Me conta seu nome e quantos anos você tem?' : `Me conta seu nome e quantos anos ${s.tem}?`
     case 'nome':
       return 'E qual o seu nome?'
@@ -1870,6 +1871,15 @@ export function responder(estadoAnterior: EstadoRobo, mensagem: string, agora: D
   if (!primeira && !aprendeuAlgo && SOBRE_ARQUIVO.test(t)) {
     estado.ultimaPergunta = perguntaFeita
     return seguir()
+  }
+
+  // "Boa tarde" no meio da conversa e cumprimento, nao resposta: devolve o
+  // cumprimento e repete a pergunta, sem contar como "nao entendi" (teste do Edu, 21/10/2026).
+  const cumprimento = /^\W*(oi+|ola|opa|bom dia|boa tarde|boa noite)\W*(tudo (bem|bom)|td (bem|bom))?\W*$/.exec(t)
+  if (!primeira && !aprendeuAlgo && cumprimento) {
+    estado.ultimaPergunta = perguntaFeita
+    const volta = cumprimento[1].startsWith('bo') ? `${maiuscula(cumprimento[1])}!` : 'Oi!'
+    return seguir(volta)
   }
 
   // Nada aproveitavel numa resposta que precisava de conteudo.

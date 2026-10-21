@@ -2,7 +2,11 @@
 // pela Cloud API, grava a mensagem e pausa o robo naquela conversa (quem
 // assumiu foi uma pessoa; o robo so volta se alguem religar).
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { enviarTexto } from '../_shared/whatsapp.ts'
+import { enviarMidia, enviarTexto, type TipoDaMeta } from '../_shared/whatsapp.ts'
+
+// Mesmo rotulo do webhook e da tela: e o texto da previa quando nao ha legenda.
+const ROTULO: Record<string, string> = { imagem: '📷 Foto', audio: '🎤 Áudio', video: '🎥 Vídeo', documento: '📄 Documento' }
+const DA_META: Record<string, TipoDaMeta> = { imagem: 'image', audio: 'audio', video: 'video', documento: 'document' }
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -24,24 +28,40 @@ Deno.serve(async (req) => {
   if (!ehEquipe) return json({ error: 'Acesso só para a equipe do escritório.' }, 403)
   const { data: usuario } = await comoUsuario.auth.getUser()
 
-  const { cliente_id, texto } = await req.json().catch(() => ({}))
-  if (!cliente_id || !String(texto ?? '').trim()) return json({ error: 'cliente_id e texto são obrigatórios.' }, 400)
+  // midia: caminho no bucket "midias" que a tela acabou de subir (pasta do cliente).
+  const { cliente_id, texto, responde_a, midia, midia_tipo, midia_nome } = await req.json().catch(() => ({}))
+  const limpo = String(texto ?? '').trim()
+  if (!cliente_id || (!limpo && !midia)) return json({ error: 'cliente_id e texto (ou arquivo) são obrigatórios.' }, 400)
+  if (midia && (!DA_META[midia_tipo] || !String(midia).startsWith(`${cliente_id}/`))) return json({ error: 'Arquivo inválido.' }, 400)
 
   const banco = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } })
   const { data: cliente } = await banco.from('clientes').select('id, telefone, robo').eq('id', cliente_id).single()
   if (!cliente) return json({ error: 'Cliente não encontrado.' }, 404)
   const { data: membro } = await banco.from('equipe').select('nome').eq('user_id', usuario.user?.id).single()
   const autor = membro?.nome ?? 'Equipe'
+  const citada = typeof responde_a === 'string' && responde_a.startsWith('wamid.') ? responde_a : undefined
 
-  const envio = await enviarTexto(cliente.telefone, String(texto).trim())
+  let envio
+  if (midia) {
+    // A Meta baixa pelo link temporario (10 min basta: ela busca na hora).
+    const { data: link, error } = await banco.storage.from('midias').createSignedUrl(midia, 600)
+    if (error || !link?.signedUrl) return json({ error: `Arquivo não encontrado: ${error?.message ?? ''}` }, 400)
+    envio = await enviarMidia(cliente.telefone, DA_META[midia_tipo], link.signedUrl, limpo || undefined, midia_nome || undefined, citada)
+  } else {
+    envio = await enviarTexto(cliente.telefone, limpo, citada)
+  }
   await banco.from('mensagens').insert({
     cliente_id,
     de: 'equipe',
-    texto: String(texto).trim(),
+    texto: limpo || (midia_tipo === 'documento' && midia_nome ? `📄 ${midia_nome}` : ROTULO[midia_tipo]),
     autor,
     wamid: envio.wamid ?? null,
     status_envio: envio.ok ? 'sent' : 'failed',
     erro_envio: envio.erro ?? null,
+    responde_a: citada ?? null,
+    midia: midia ?? null,
+    midia_tipo: midia ? midia_tipo : null,
+    midia_nome: midia ? (midia_nome ?? null) : null,
   })
   if (!cliente.robo?.pausado) {
     await banco.from('clientes').update({ robo: { ...cliente.robo, pausado: true, motivoPausa: `${autor} assumiu a conversa` }, nao_lidas: 0 }).eq('id', cliente_id)

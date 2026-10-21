@@ -5,7 +5,7 @@ import { baseDeDemonstracao } from './dados-demo'
 import { etapa as infoEtapa } from './escritorio'
 import { carregarClientes, carregarUmCliente, clientesMudadosDesde, enviarResposta, gravarDiferenca } from './repositorio'
 import { supabase } from './supabase'
-import type { Base, Cliente, Contrato, Documentos, Origem } from './tipos'
+import type { Base, Cliente, Contrato, Documentos, ExtrasDoEnvio, Origem } from './tipos'
 
 /**
  * Estado do sistema, em dois modos:
@@ -41,7 +41,7 @@ export interface Acoes {
   cliente: (id: string) => Cliente | undefined
   /** So na demonstracao: escrever como se fosse o cliente. */
   receber: (id: string, texto: string) => void
-  responder: (id: string, texto: string, autor: string) => Promise<void>
+  responder: (id: string, texto: string, autor: string, extras?: ExtrasDoEnvio) => Promise<void>
   novoContato: (telefone: string, origem: Origem, primeiraMensagem: string) => string
   pausarRobo: (id: string, motivo: string) => void
   religarRobo: (id: string) => void
@@ -277,10 +277,10 @@ function ProvedorReal({ children }: { children: ReactNode }) {
       receber: () => {
         throw new Error('Escrever como o cliente só existe na demonstração.')
       },
-      responder: async (cid, texto) => {
+      responder: async (cid, texto, _autor, extras) => {
         // Contrato importado antes do numero: avisar aqui, e nao com o erro da Meta.
         if (!atual.current.find((c) => c.id === cid)?.telefone) throw new Error('Este cliente ainda não tem WhatsApp. Adicione o número na ficha antes de responder.')
-        await enviarResposta(cid, texto)
+        await enviarResposta(cid, texto, extras)
         atualizarUm(cid)
       },
       novoContato: () => {

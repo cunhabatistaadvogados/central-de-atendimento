@@ -1,6 +1,7 @@
 import { AlertCircle, ArrowLeft, Bot, Check, CheckCheck, ChevronDown, Hand, List as ListaIcone, MessageSquareText, MoreVertical, PlayCircle, Search, Send, X } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { BotaoAnexar, BotaoResponder, Citacao, FaixaDoEnvio, MidiaDaMensagem, podeCitar, previaDaMensagem, textoSemMidia, useArrastarParaResponder } from '@/components/Midia'
 import { Avatar } from '@/components/ui'
 import { desde, esperandoEquipe } from '@/lib/atendimento'
 import { etapa as infoEtapa, RESPOSTAS_PRONTAS } from '@/lib/escritorio'
@@ -159,7 +160,7 @@ export function ListaWhatsApp({
                   <span className="flex min-w-0 items-center gap-1 text-[13.5px] text-[#667781]">
                     {ultima?.de === 'robo' && <Bot className="h-3.5 w-3.5 shrink-0 text-[#008069]" />}
                     {ultima?.de === 'equipe' && <CheckCheck className="h-3.5 w-3.5 shrink-0 text-[#53bdeb]" />}
-                    <span className="truncate">{(ultima?.texto || 'Sem mensagens').replace(/\s+/g, ' ')}</span>
+                    <span className="truncate">{((ultima && previaDaMensagem(ultima)) || 'Sem mensagens').replace(/\s+/g, ' ')}</span>
                   </span>
                   {c.naoLidas > 0 && (
                     <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#1daa61] px-1.5 text-[11px] font-bold text-white">{c.naoLidas}</span>
@@ -185,15 +186,33 @@ function Confirmacao({ status }: { status?: string }) {
   return null
 }
 
-function BalaoWhatsApp({ m, comRabinho, comNome }: { m: Mensagem; comRabinho: boolean; comNome: boolean }) {
+function BalaoWhatsApp({
+  m,
+  comRabinho,
+  comNome,
+  mensagens,
+  nomeDoCliente,
+  onResponder,
+}: {
+  m: Mensagem
+  comRabinho: boolean
+  comNome: boolean
+  mensagens: Mensagem[]
+  nomeDoCliente: string
+  onResponder?: (m: Mensagem) => void
+}) {
   const nosso = m.de !== 'cliente'
+  const responder = onResponder && podeCitar(m) ? () => onResponder(m) : undefined
+  const arrastar = useArrastarParaResponder(responder)
   return (
-    <div className={`flex ${nosso ? 'justify-end' : 'justify-start'} ${comRabinho ? 'mt-1.5' : ''}`}>
+    <div id={`msg-${m.id}`} className={`flex ${nosso ? 'justify-end' : 'justify-start'} ${comRabinho ? 'mt-1.5' : ''}`}>
       <div
-        className={`relative max-w-[85%] rounded-[7.5px] px-[9px] pb-[7px] pt-[6px] shadow-[0_1px_0.5px_rgba(11,20,26,.13)] ${nosso ? 'bg-[#d9fdd3]' : 'bg-white'} ${
+        {...arrastar}
+        className={`group relative max-w-[85%] rounded-[7.5px] px-[9px] pb-[7px] pt-[6px] shadow-[0_1px_0.5px_rgba(11,20,26,.13)] ${nosso ? 'bg-[#d9fdd3]' : 'bg-white'} ${
           comRabinho ? (nosso ? 'rounded-tr-none' : 'rounded-tl-none') : ''
         }`}
       >
+        {responder && <BotaoResponder onClick={responder} lado={nosso ? 'esquerda' : 'direita'} />}
         {comRabinho && (
           <svg viewBox="0 0 8 13" width="8" height="13" aria-hidden="true" className={`absolute top-0 ${nosso ? '-right-2' : '-left-2'}`}>
             <path
@@ -207,11 +226,13 @@ function BalaoWhatsApp({ m, comRabinho, comNome }: { m: Mensagem; comRabinho: bo
         {nosso && comNome && (
           <p className={`mb-0.5 flex items-center gap-1 text-[12px] font-bold ${m.de === 'robo' ? 'text-[#008069]' : 'text-[#8a5f12]'}`}>
             {m.de === 'robo' && <Bot className="h-3.5 w-3.5" />}
-            {m.de === 'robo' ? 'Robô CB&AA' : m.autor || 'Equipe'}
+            {m.de === 'robo' ? 'Mary CB&AA' : m.autor || 'Equipe'}
           </p>
         )}
+        <Citacao m={m} mensagens={mensagens} nomeDoCliente={nomeDoCliente} />
+        <MidiaDaMensagem m={m} />
         <p className="whitespace-pre-wrap break-words text-[15px] leading-[20px] text-[#111b21]">
-          {m.texto}
+          {textoSemMidia(m)}
           {/* Espaco invisivel do tamanho da hora: se a ultima linha nao tem
               lugar para ela, o espaco desce e a hora nao cobre o texto. */}
           <span className={`invisible inline-block ${nosso ? 'w-[68px]' : 'w-[44px]'}`} aria-hidden="true" />
@@ -241,6 +262,12 @@ export function ConversaWhatsApp({
   comoCliente,
   setComoCliente,
   enviar,
+  respondendo,
+  onResponder,
+  onCancelarResposta,
+  arquivo,
+  onEscolherArquivo,
+  onTirarArquivo,
   onVoltar,
   onVisualPadrao,
   abrirCliente,
@@ -257,6 +284,12 @@ export function ConversaWhatsApp({
   comoCliente: boolean
   setComoCliente: (v: boolean) => void
   enviar: () => Promise<void>
+  respondendo: Mensagem | null
+  onResponder?: (m: Mensagem) => void
+  onCancelarResposta: () => void
+  arquivo: File | null
+  onEscolherArquivo?: (f: File) => void
+  onTirarArquivo: () => void
   onVoltar: () => void
   onVisualPadrao: () => void
   abrirCliente: (id: string) => void
@@ -313,7 +346,7 @@ export function ConversaWhatsApp({
   }
 
   async function mandar() {
-    if (!texto.trim() || enviando) return
+    if ((!texto.trim() && !arquivo) || enviando) return
     grudado.current = true
     setProntas(false)
     await enviar()
@@ -414,7 +447,20 @@ export function ConversaWhatsApp({
                     <span className="rounded-[8px] bg-white px-3 py-1 text-[12.5px] font-medium text-[#54656f] shadow-[0_1px_0.5px_rgba(11,20,26,.13)]">{rotuloDoDia(m.em)}</span>
                   </div>
                 )}
-                <BalaoWhatsApp m={m} comRabinho={!mesmoLado} comNome={!mesmaPessoa} />
+                <BalaoWhatsApp
+                  m={m}
+                  comRabinho={!mesmoLado}
+                  comNome={!mesmaPessoa}
+                  mensagens={c.mensagens}
+                  nomeDoCliente={c.nome}
+                  onResponder={
+                    onResponder &&
+                    ((x) => {
+                      onResponder(x)
+                      campo.current?.focus()
+                    })
+                  }
+                />
               </div>
             )
           })}
@@ -465,6 +511,9 @@ export function ConversaWhatsApp({
         {comoCliente && demonstracao && (
           <p className="mx-1 mb-1.5 rounded-[10px] bg-sky-50 px-3 py-1.5 text-[12px] font-semibold text-sky-700">Teste: você está escrevendo como o cliente.</p>
         )}
+        <div className="mx-1">
+          <FaixaDoEnvio respondendo={respondendo} nomeDoCliente={c.nome} onCancelarResposta={onCancelarResposta} arquivo={arquivo} onTirarArquivo={onTirarArquivo} />
+        </div>
         <div className="flex items-end gap-1.5">
           <div
             className={`flex min-h-[48px] min-w-0 flex-1 items-end rounded-[24px] bg-white pl-1 pr-2 shadow-[0_1px_0.5px_rgba(11,20,26,.13)] ${
@@ -501,11 +550,12 @@ export function ConversaWhatsApp({
               placeholder={comoCliente && demonstracao ? 'Mensagem do cliente' : c.robo.pausado ? 'Mensagem' : 'Mensagem (pausa o robô)'}
               className="max-h-[120px] min-w-0 flex-1 resize-none bg-transparent px-1 py-[13px] text-[16px] leading-[21px] text-[#111b21] outline-none placeholder:text-[#8696a0]"
             />
+            {onEscolherArquivo && <BotaoAnexar onEscolher={onEscolherArquivo} className="mb-[6px] shrink-0 rounded-full p-2 text-[#54656f] active:bg-black/5" />}
           </div>
           <button
             type="button"
             onClick={() => void mandar()}
-            disabled={!texto.trim() || enviando}
+            disabled={(!texto.trim() && !arquivo) || enviando}
             aria-label="Enviar"
             className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-white shadow-[0_1px_2px_rgba(11,20,26,.2)] transition disabled:opacity-60 ${
               comoCliente && demonstracao ? 'bg-sky-600 active:bg-sky-700' : 'bg-[#1daa61] active:bg-[#178a4f]'

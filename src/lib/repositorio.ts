@@ -10,7 +10,7 @@
 import { novoEstado, type EstadoRobo } from '@motor/robo'
 import { dadosVazios } from './contrato'
 import { supabase } from './supabase'
-import type { Cliente, Contrato, DadosContrato, Documentos, Evento, Mensagem, Pendencia } from './tipos'
+import type { Cliente, Contrato, DadosContrato, Documentos, Evento, ExtrasDoEnvio, Mensagem, Pendencia, TipoMidia } from './tipos'
 
 const DOCS_VAZIOS: Documentos = { rg: false, cpf: false, comprovante: false, cadunico: false, laudo: false }
 
@@ -107,7 +107,7 @@ async function todas<T>(tabela: string, colunas: string, ordem: string, filtro?:
   return linhas
 }
 
-const COLUNAS_MENSAGEM = 'id, cliente_id, de, texto, autor, em, status_envio, erro_envio'
+const COLUNAS_MENSAGEM = 'id, cliente_id, de, texto, autor, em, status_envio, erro_envio, wamid, midia, midia_tipo, midia_nome, responde_a'
 
 /**
  * So o atendimento de 20/10/2026 em diante. O historico do Pixel Hub (1.767
@@ -222,6 +222,11 @@ function montarClientes(
           autor: m.autor ?? undefined,
           statusEnvio: m.status_envio ?? undefined,
           erroEnvio: m.erro_envio ?? undefined,
+          wamid: m.wamid ?? undefined,
+          midia: m.midia ?? undefined,
+          midiaTipo: (m.midia_tipo as TipoMidia) ?? undefined,
+          midiaNome: m.midia_nome ?? undefined,
+          respondeA: m.responde_a ?? undefined,
         }),
       ),
       pendencias: (pendencias.get(l.id) ?? []).map(
@@ -317,10 +322,46 @@ export async function linkDoContratoAssinado(caminho: string): Promise<string> {
   return data.signedUrl
 }
 
+/** Link temporario (6 h) de foto, audio, video ou documento do bucket "midias". */
+export async function linkDaMidia(caminho: string): Promise<string> {
+  const { data, error } = await exigir().storage.from('midias').createSignedUrl(caminho, 21600)
+  if (error || !data?.signedUrl) throw new Error(error?.message ?? 'arquivo não encontrado')
+  return data.signedUrl
+}
+
+// O que a Meta aceita de cada tipo (o resto vai como documento, que aceita tudo).
+const LIMITE_MB: Record<TipoMidia, number> = { imagem: 5, audio: 16, video: 16, documento: 100, figurinha: 0 }
+
+function tipoDoArquivo(f: File): TipoMidia {
+  if (/^image\/(jpeg|png)$/.test(f.type) && f.size <= LIMITE_MB.imagem * 1048576) return 'imagem'
+  if (/^video\/(mp4|3gpp)$/.test(f.type)) return 'video'
+  if (/^audio\/(aac|amr|mpeg|mp4|ogg)$/.test(f.type)) return 'audio'
+  return 'documento'
+}
+
 /** Resposta da equipe: a funcao envia pelo WhatsApp, grava e pausa o robo. */
-export async function enviarResposta(clienteId: string, texto: string): Promise<void> {
+export async function enviarResposta(clienteId: string, texto: string, extras: ExtrasDoEnvio = {}): Promise<void> {
   const db = exigir()
-  const { data, error } = await db.functions.invoke('whatsapp-send', { body: { cliente_id: clienteId, texto } })
+  let corpo: Record<string, string | undefined> = { cliente_id: clienteId, texto, responde_a: extras.respondeA }
+  const a = extras.arquivo
+  if (a) {
+    const tipo = tipoDoArquivo(a)
+    if (a.size > LIMITE_MB[tipo] * 1048576) throw new Error(`Arquivo grande demais: o WhatsApp aceita até ${LIMITE_MB[tipo]} MB.`)
+    const ext = a.name.match(/\.([A-Za-z0-9]{1,8})$/)?.[1]?.toLowerCase() ?? 'bin'
+    const caminho = `${clienteId}/enviada-${crypto.randomUUID()}.${ext}`
+    const subida = await db.storage.from('midias').upload(caminho, a, { contentType: a.type || 'application/octet-stream' })
+    if (subida.error) throw new Error(`Não consegui subir o arquivo: ${subida.error.message}`)
+    // Audio nao leva legenda no WhatsApp: o texto vai logo depois, separado.
+    corpo = { ...corpo, texto: tipo === 'audio' ? '' : texto, midia: caminho, midia_tipo: tipo, midia_nome: a.name }
+    await chamarEnvio(corpo)
+    if (tipo === 'audio' && texto.trim()) await chamarEnvio({ cliente_id: clienteId, texto })
+    return
+  }
+  await chamarEnvio(corpo)
+}
+
+async function chamarEnvio(corpo: Record<string, string | undefined>): Promise<void> {
+  const { data, error } = await exigir().functions.invoke('whatsapp-send', { body: corpo })
   if (error) {
     // O corpo do erro da funcao traz o motivo real (ex.: janela de 24h fechada).
     let motivo = error.message

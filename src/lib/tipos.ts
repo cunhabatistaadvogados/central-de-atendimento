@@ -22,6 +22,22 @@ export interface Mensagem {
   /** So no modo real: sent, delivered, read ou failed (vem da Meta). */
   statusEnvio?: string
   erroEnvio?: string
+  /** So no modo real: id da Meta, para responder citando esta mensagem. */
+  wamid?: string
+  /** Caminho no bucket privado "midias". */
+  midia?: string
+  midiaTipo?: TipoMidia
+  midiaNome?: string
+  /** wamid da mensagem citada (resposta arrastada no WhatsApp). */
+  respondeA?: string
+}
+
+export type TipoMidia = 'imagem' | 'audio' | 'video' | 'documento' | 'figurinha'
+
+/** O que pode ir junto com o texto da equipe. */
+export interface ExtrasDoEnvio {
+  respondeA?: string
+  arquivo?: File
 }
 
 export interface Pendencia {

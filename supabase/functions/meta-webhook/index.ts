@@ -9,7 +9,7 @@
 // WHATSAPP_PHONE_NUMBER_ID. SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY ja vem do ambiente.
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { contratoComParteFixa, novoEstado, responder, type EstadoRobo, type Etapa } from '../_shared/robo.ts'
-import { assinaturaValida, enviarTexto } from '../_shared/whatsapp.ts'
+import { assinaturaValida, baixarMidia, enviarTexto } from '../_shared/whatsapp.ts'
 
 const ORDEM: Etapa[] = ['novo', 'qualificacao', 'qualificado', 'reuniao', 'contrato', 'contratado']
 
@@ -25,6 +25,41 @@ interface MensagemMeta {
   interactive?: { button_reply?: { title: string }; list_reply?: { title: string } }
   /** Anuncio de clique para WhatsApp do Meta (so na 1a mensagem que veio dele). */
   referral?: { source_url?: string; source_id?: string; source_type?: string; headline?: string; body?: string; ctwa_clid?: string }
+  image?: MidiaMeta
+  audio?: MidiaMeta
+  video?: MidiaMeta
+  document?: MidiaMeta
+  sticker?: MidiaMeta
+  /** Resposta citada: id da mensagem que a familia arrastou para responder. */
+  context?: { id?: string }
+  reaction?: { message_id?: string; emoji?: string }
+  location?: { latitude?: number; longitude?: number; name?: string; address?: string }
+  contacts?: { name?: { formatted_name?: string }; phones?: { phone?: string }[] }[]
+}
+
+interface MidiaMeta {
+  id: string
+  mime_type?: string
+  caption?: string
+  filename?: string
+}
+
+type TipoMidia = 'imagem' | 'audio' | 'video' | 'documento' | 'figurinha'
+const TIPO_DA_MIDIA: Record<string, TipoMidia> = { image: 'imagem', audio: 'audio', video: 'video', document: 'documento', sticker: 'figurinha' }
+// Mesmo rotulo da tela (src/components/Midia.tsx): e o texto da previa na lista.
+const ROTULO: Record<TipoMidia, string> = { imagem: '📷 Foto', audio: '🎤 Áudio', video: '🎥 Vídeo', documento: '📄 Documento', figurinha: '🌟 Figurinha' }
+const EXTENSAO: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'audio/ogg': 'ogg',
+  'audio/mpeg': 'mp3',
+  'audio/mp4': 'm4a',
+  'audio/aac': 'aac',
+  'audio/amr': 'amr',
+  'video/mp4': 'mp4',
+  'video/3gpp': '3gp',
+  'application/pdf': 'pdf',
 }
 
 // Origem do contato novo (etiquetas pedidas pelo Lucas em 21/10/2026). O
@@ -42,12 +77,59 @@ function origemDoContato(m: MensagemMeta, texto: string): string {
 
 const NOME_DA_ORIGEM: Record<string, string> = { meta: 'anúncio do Meta', google: 'Google', site: 'site', anuncio: 'anúncio' }
 
-function textoDaMensagem(m: MensagemMeta): string {
-  if (m.type === 'text') return m.text?.body ?? ''
-  if (m.type === 'button') return m.button?.text ?? ''
-  if (m.type === 'interactive') return m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title ?? ''
-  if (m.type === 'audio' || m.type === 'voice') return '[áudio recebido]'
-  return '[arquivo recebido]'
+interface Conteudo {
+  /** O que fica gravado e aparece na tela. */
+  texto: string
+  /** O que o robo le. Vazio: reacao e figurinha nao sao resposta, o robo nao fala. */
+  entrada: string
+  midia?: MidiaMeta & { tipo: TipoMidia }
+}
+
+function conteudoDaMensagem(m: MensagemMeta): Conteudo {
+  const so = (t: string): Conteudo => ({ texto: t, entrada: t })
+  if (m.type === 'text') return so(m.text?.body ?? '')
+  if (m.type === 'button') return so(m.button?.text ?? '')
+  if (m.type === 'interactive') return so(m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title ?? '')
+  const tipo = TIPO_DA_MIDIA[m.type]
+  const midia = tipo ? m[m.type as 'image' | 'audio' | 'video' | 'document' | 'sticker'] : undefined
+  if (tipo && midia?.id) {
+    // O robo segue lendo so "[audio recebido]"/"[arquivo recebido]" (roteiro
+    // testado); a legenda fica gravada para a equipe ler.
+    const legenda = midia.caption?.trim()
+    const texto = legenda || (tipo === 'documento' && midia.filename ? `📄 ${midia.filename}` : ROTULO[tipo])
+    const entrada = tipo === 'figurinha' ? '' : tipo === 'audio' ? '[áudio recebido]' : '[arquivo recebido]'
+    return { texto, entrada, midia: { ...midia, tipo } }
+  }
+  if (m.type === 'reaction') return { texto: m.reaction?.emoji ? `Reagiu com ${m.reaction.emoji}` : '', entrada: '' }
+  if (m.type === 'location' && m.location) {
+    const l = m.location
+    const lugar = [l.name, l.address].filter(Boolean).join(' - ')
+    return { texto: `📍 Localização${lugar ? `: ${lugar}` : ''}\nhttps://maps.google.com/?q=${l.latitude},${l.longitude}`, entrada: '[arquivo recebido]' }
+  }
+  if (m.type === 'contacts' && m.contacts?.length) {
+    const lista = m.contacts.map((k) => [k.name?.formatted_name, k.phones?.[0]?.phone].filter(Boolean).join(' ')).join('\n')
+    return { texto: `👤 Contato: ${lista}`, entrada: '[arquivo recebido]' }
+  }
+  return { texto: 'Mensagem que a API do WhatsApp não mostra (enquete, visualização única ou outro tipo). Veja no celular.', entrada: '[arquivo recebido]' }
+}
+
+// Baixa da Meta e guarda no bucket privado: o link da Meta expira em minutos
+// e so abre com o token, a tela nunca conseguiria mostrar direto.
+async function guardarMidia(linhaId: string, clienteId: string, midia: MidiaMeta & { tipo: TipoMidia }) {
+  const baixada = await baixarMidia(midia.id)
+  if (!baixada.ok) {
+    await evento(clienteId, 'sistema', `Não consegui baixar a mídia (${midia.tipo}) do WhatsApp: ${baixada.erro}`)
+    return
+  }
+  const mime = (baixada.mime || midia.mime_type || 'application/octet-stream').split(';')[0].trim()
+  const ext = EXTENSAO[mime] ?? midia.filename?.match(/\.([A-Za-z0-9]{1,8})$/)?.[1]?.toLowerCase() ?? 'bin'
+  const caminho = `${clienteId}/${linhaId}.${ext}`
+  const subida = await banco.storage.from('midias').upload(caminho, baixada.bytes, { contentType: mime, upsert: true })
+  if (subida.error) {
+    await evento(clienteId, 'sistema', `Não consegui guardar a mídia do WhatsApp: ${subida.error.message}`)
+    return
+  }
+  await banco.from('mensagens').update({ midia: caminho }).eq('id', linhaId)
 }
 
 async function evento(clienteId: string, tipo: string, texto: string) {
@@ -55,12 +137,14 @@ async function evento(clienteId: string, tipo: string, texto: string) {
 }
 
 async function processar(m: MensagemMeta) {
-  const texto = textoDaMensagem(m).trim()
+  const conteudo = conteudoDaMensagem(m)
+  const texto = conteudo.texto.trim()
   if (!texto) return
   const em = new Date(Number(m.timestamp) * 1000 || Date.now())
 
   // Cliente por telefone (cria na primeira mensagem).
   let { data: cliente } = await banco.from('clientes').select('*').eq('telefone', m.from).maybeSingle()
+  let novo = false
   if (!cliente) {
     const origem = origemDoContato(m, texto)
     const anuncio = m.referral
@@ -77,20 +161,54 @@ async function processar(m: MensagemMeta) {
       cliente = de_novo.data
     } else {
       cliente = criado.data
+      novo = true
       await evento(cliente.id, 'sistema', `Contato chegou pelo ${NOME_DA_ORIGEM[origem]}${anuncio?.titulo ? `: "${anuncio.titulo}"` : ''}`)
     }
   }
   if (!cliente) throw new Error(`cliente ${m.from} nao encontrado nem criado`)
 
   // Idempotencia: a mesma mensagem da Meta so entra uma vez.
-  const gravada = await banco.from('mensagens').insert({ cliente_id: cliente.id, de: 'cliente', texto, wamid: m.id, em: em.toISOString() }).select('id')
+  const gravada = await banco
+    .from('mensagens')
+    .insert({
+      cliente_id: cliente.id,
+      de: 'cliente',
+      texto,
+      wamid: m.id,
+      em: em.toISOString(),
+      responde_a: m.context?.id ?? (m.type === 'reaction' ? (m.reaction?.message_id ?? null) : null),
+      midia_tipo: conteudo.midia?.tipo ?? null,
+      midia_nome: conteudo.midia?.filename ?? null,
+    })
+    .select('id')
+    .single()
   if (gravada.error) {
     if (gravada.error.code === '23505') return
     throw gravada.error
   }
 
+  // Baixar a midia nao segura o robo nem a resposta para a Meta: corre junto
+  // e termina depois do 200 (EdgeRuntime.waitUntil).
+  if (conteudo.midia) {
+    const tarefa = guardarMidia(gravada.data.id, cliente.id, conteudo.midia).catch((e) => console.error('[meta-webhook] midia', m.id, e))
+    const runtime = (globalThis as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime
+    if (runtime) runtime.waitUntil(tarefa)
+    else await tarefa
+  }
+
+  // Reacao e figurinha: a equipe ve, o robo nao responde. Figurinha como
+  // primeiro contato vale um "oi", senao a familia ficaria sem abertura.
+  const entrada = conteudo.entrada || (novo && m.type !== 'reaction' ? 'oi' : '')
+  if (!entrada) {
+    await banco
+      .from('clientes')
+      .update({ nao_lidas: (cliente.nao_lidas ?? 0) + (m.type === 'reaction' ? 0 : 1), ultima_do_cliente_em: em.toISOString() })
+      .eq('id', cliente.id)
+    return
+  }
+
   const estado: EstadoRobo = cliente.robo?.ficha ? cliente.robo : novoEstado()
-  const r = responder(estado, texto, em)
+  const r = responder(estado, entrada, em)
 
   let etapa: Etapa = cliente.etapa
   let reuniao = cliente.reuniao
