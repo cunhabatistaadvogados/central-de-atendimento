@@ -2,6 +2,7 @@
 Fala com a D4Sign pela funcao d4sign (21/10/2026).
 
     python scripts/d4sign.py cofres
+    python scripts/d4sign.py documento <uuid do documento na D4Sign>
 
 "cofres" confere as chaves da API (segredos no Supabase) e lista os cofres da
 conta do escritorio. As chaves da D4Sign nunca passam por aqui; a chave
@@ -21,10 +22,11 @@ if not CHAVE:
     sys.exit('Falta SUPABASE_SERVICE_ROLE_KEY no .env.local.')
 
 acao = sys.argv[1] if len(sys.argv) > 1 else ''
-if acao not in ('cofres',):
+if acao not in ('cofres', 'documento') or (acao == 'documento' and len(sys.argv) < 3):
     sys.exit(__doc__)
+corpo = {'acao': acao, 'uuid': sys.argv[2] if acao == 'documento' else None}
 
-req = urllib.request.Request(f'{URL}/functions/v1/d4sign', data=json.dumps({'acao': acao}).encode(), method='POST')
+req = urllib.request.Request(f'{URL}/functions/v1/d4sign', data=json.dumps(corpo).encode(), method='POST')
 req.add_header('Authorization', f'Bearer {CHAVE}')
 req.add_header('Content-Type', 'application/json')
 try:

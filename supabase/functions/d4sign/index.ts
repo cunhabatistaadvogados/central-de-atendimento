@@ -2,7 +2,8 @@
 // (21/10/2026). O Lucas mandou as chaves da API ("CBAA_PREV"), guardadas nos
 // segredos D4SIGN_TOKEN_API e D4SIGN_CRYPT_KEY: elas so existem aqui dentro.
 //
-//   cofres   confere as chaves e lista os cofres da conta (nome e uuid)
+//   cofres     confere as chaves e lista os cofres da conta (nome e uuid)
+//   documento  em que cofre esta um contrato e qual a situacao dele
 //
 // Por enquanto so a partir do computador do Edu (chave service_role, via
 // scripts/d4sign.py). O envio do contrato pela Central vem depois, com OK.
@@ -50,5 +51,12 @@ Deno.serve(async (req) => {
 
   const corpo = await req.json().catch(() => ({}))
   if (corpo.acao === 'cofres') return json(await d4('GET', 'safes'))
+  if (corpo.acao === 'documento') {
+    if (!/^[0-9a-f-]{36}$/.test(String(corpo.uuid ?? ''))) return json({ error: 'uuid do documento inválido.' }, 400)
+    const r = await d4('GET', `documents/${corpo.uuid}`)
+    // So cofre e situacao: o nome do arquivo traz o nome do cliente.
+    const doc = Array.isArray(r.resposta) ? (r.resposta[0] as Record<string, unknown>) : null
+    return json(doc ? { http: r.http, cofre: doc.safeName, uuid_cofre: doc.uuidSafe, situacao: doc.statusName } : r)
+  }
   return json({ error: 'Ação desconhecida.' }, 400)
 })
