@@ -1,4 +1,4 @@
-import { emHorarioComercial, ehIdoso } from '@motor/robo'
+import { emHorarioComercial, ehIdoso, temLaudo } from '@motor/robo'
 import { AlarmClock, ArrowUpRight, CalendarCheck2, CheckCircle2, FileSignature, MessageCircleWarning, TrendingUp, UsersRound } from 'lucide-react'
 import type { ComponentType, ReactNode } from 'react'
 import { Avatar, ChipEtapa } from '@/components/ui'
@@ -188,11 +188,11 @@ export default function VisaoGeral({ abrirCliente, irPara }: { abrirCliente: (id
           </div>
           <div className="mt-6 grid grid-cols-2 gap-3">
             <div className="rounded-2xl bg-ouro-50 p-3">
-              <p className="titulo-serif text-3xl text-marinho-900">{clientes.filter((c) => c.robo.ficha.laudo === 'recente').length}</p>
-              <p className="text-[11px] font-semibold text-slate-500">com laudo recente</p>
+              <p className="titulo-serif text-3xl text-marinho-900">{clientes.filter((c) => temLaudo(c.robo.ficha)).length}</p>
+              <p className="text-[11px] font-semibold text-slate-500">com laudo</p>
             </div>
             <div className="rounded-2xl bg-marinho-50 p-3">
-              <p className="titulo-serif text-3xl text-marinho-900">{clientes.filter((c) => c.robo.ficha.laudo === 'sem' || c.robo.ficha.laudo === 'antigo').length}</p>
+              <p className="titulo-serif text-3xl text-marinho-900">{clientes.filter((c) => c.robo.ficha.laudo === 'sem').length}</p>
               <p className="text-[11px] font-semibold text-slate-500">sem laudo (fase médica)</p>
             </div>
           </div>

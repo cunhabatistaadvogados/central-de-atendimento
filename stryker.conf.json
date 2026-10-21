@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
   "testRunner": "command",
-  "commandRunner": { "command": "node tests/robo.test.ts" },
+  "commandRunner": { "command": "node tests/robo.test.ts && node tests/painel/suspeitas.ts --teste && node tests/painel/fuzz.ts 400 20261020 --teste" },
   "mutate": ["supabase/functions/_shared/robo.ts"],
   "coverageAnalysis": "off",
   "concurrency": 6,

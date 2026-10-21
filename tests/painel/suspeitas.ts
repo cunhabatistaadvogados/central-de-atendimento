@@ -1,12 +1,21 @@
 // Suspeitas da leitura do robo, cada uma numa conversa montada (painel de
 // avaliacao, 20/10/2026). Mostra se a suspeita se CONFIRMA no robo de hoje.
 //
-//   node tests/painel/suspeitas.ts
+//   node tests/painel/suspeitas.ts            robo de hoje
+//   node tests/painel/suspeitas.ts --teste    falha se alguma se confirmar (npm test)
+//   ROBO=<arquivo> node tests/painel/suspeitas.ts   as mesmas conversas noutra versao (o "antes")
 //
-// Nao e teste de CI: e o levantamento para o Lucas decidir o que corrigir.
+// Comecou como levantamento para o Lucas decidir o que corrigir (20/10/2026);
+// depois do roteiro v3.2 (21/10/2026) virou teste: nenhuma pode voltar.
 import { writeFileSync, mkdirSync } from 'node:fs'
-import { novoEstado, responder, type EstadoRobo, type Ficha, type Sinal } from '../../supabase/functions/_shared/robo.ts'
+import { resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import type { EstadoRobo, Ficha, Sinal } from '../../supabase/functions/_shared/robo.ts'
 import { conferir } from './regras.ts'
+
+type Robo = typeof import('../../supabase/functions/_shared/robo.ts')
+const { novoEstado, responder } = (await import(process.env.ROBO ? pathToFileURL(resolve(process.env.ROBO)).href : '../../supabase/functions/_shared/robo.ts')) as Robo
+const anotou = (f: Ficha, trecho: RegExp) => ((f as { anotacoes?: string[] }).anotacoes ?? []).some((a) => trecho.test(a))
 
 const SEGUNDA_10H = new Date('2026-10-19T13:00:00Z')
 const JANEIRO_2027 = new Date('2027-01-18T13:00:00Z')
@@ -154,19 +163,19 @@ const S: Suspeita[] = [
   },
   {
     id: 'S17',
-    titulo: 'em janeiro de 2027, "laudo de 2027" não é reconhecido como recente (anos fixos no código)',
+    titulo: 'em janeiro de 2027, "laudo de 2027" não é reconhecido como laudo (anos fixos no código)',
     gravidade: 'media',
     agora: JANEIRO_2027,
     falas: [...ATE_ROTINA.slice(0, 4), 'tem sim, de 2027'],
-    confere: (r) => (r.ficha.laudo !== 'recente' ? `laudo gravado: ${r.ficha.laudo ?? '(nada)'}; robô: "${r.ultima}"` : ''),
+    confere: (r) => (!['recente', 'tem'].includes(r.ficha.laudo ?? '') ? `laudo gravado: ${r.ficha.laudo ?? '(nada)'}; robô: "${r.ultima}"` : ''),
   },
   {
     id: 'S18',
-    titulo: 'em janeiro de 2027, "laudo de 2025" ainda conta como recente',
+    titulo: 'em janeiro de 2027, "laudo de 2025" ainda conta como recente (o robô decide pela idade do laudo, D1)',
     gravidade: 'media',
     agora: JANEIRO_2027,
     falas: [...ATE_ROTINA.slice(0, 4), 'tem, de 2025'],
-    confere: (r) => (r.ficha.laudo === 'recente' ? `laudo gravado: ${r.ficha.laudo}` : ''),
+    confere: (r) => (r.ficha.laudo === 'recente' || r.ficha.laudo === 'antigo' ? `laudo gravado: ${r.ficha.laudo}` : ''),
   },
   {
     id: 'S19',
@@ -180,7 +189,8 @@ const S: Suspeita[] = [
     titulo: 'BPC de outra pessoa da casa entra na renda sem nenhuma ressalva',
     gravidade: 'baixa',
     falas: [...ATE_RENDA, 'somos 3, a única renda é o BPC da minha mãe, 1621'],
-    confere: (r) => (r.ficha.rendaCasa === 1621 ? `renda gravada ${r.ficha.rendaCasa} (o BPC de idoso ou PcD da casa não entra na conta do INSS)` : ''),
+    // Item 3 do Lucas: a fala nao muda, a ficha ganha a anotacao.
+    confere: (r) => (r.ficha.rendaCasa === 1621 && !anotou(r.ficha, /LOAS/) ? `renda gravada ${r.ficha.rendaCasa} sem anotação (o BPC de idoso ou PcD da casa não entra na conta do INSS)` : ''),
   },
   {
     id: 'S21',
@@ -231,7 +241,11 @@ const S: Suspeita[] = [
     titulo: 'idosa que mora com filho casado e nora: robô conta os 3 na casa (a lei conta só ela)',
     gravidade: 'media',
     falas: ['oi, é pra minha mãe, ela tem 70 anos', 'Rita', 'sim, atualizado', 'moram 3, minha mãe, meu irmão casado e a esposa dele, a renda deles é 4000'],
-    confere: (r) => (r.ficha.pessoasCasa === 3 ? `pessoas ${r.ficha.pessoasCasa}, renda ${r.ficha.rendaCasa}: renda por pessoa na tela da equipe R$ ${Math.round((r.ficha.rendaCasa ?? 0) / 3)}` : ''),
+    // C20: o robo anota o parentesco e nao calcula; a equipe confere quem entra na conta.
+    confere: (r) =>
+      r.ficha.pessoasCasa === 3 && !anotou(r.ficha, /parente/)
+        ? `pessoas ${r.ficha.pessoasCasa}, renda ${r.ficha.rendaCasa}, sem anotação: renda por pessoa na tela da equipe R$ ${Math.round((r.ficha.rendaCasa ?? 0) / 3)}`
+        : '',
   },
   {
     id: 'J06',
@@ -254,7 +268,7 @@ const S: Suspeita[] = [
     falas: ['oi', 'é pro meu filho', 'Ana, ele tem 6 anos'],
     confere: (r) => {
       const tudo = r.turnos.flatMap((t) => t.robo).join(' ')
-      return /diagnóstico/.test(r.ultima) && !/privacidade|seus dados|LGPD/i.test(tudo) ? `robô: "${r.ultima}"` : ''
+      return /diagnóstico/.test(r.ultima) && !/privacidade|seus dados|LGPD|sobre saúde fica só com a equipe/i.test(tudo) ? `robô: "${r.ultima}"` : ''
     },
   },
   {
@@ -278,6 +292,25 @@ const S: Suspeita[] = [
     falas: [...ATE_ROTINA, 'autismo dá direito automático né?'],
     confere: (r) => (r.ficha.rotina && /direito/.test(r.ficha.rotina) ? `rotina gravada: "${r.ficha.rotina}"; robô: "${r.ultima}"` : ''),
   },
+  // Ajustes do idoso aprovados pelo Lucas em 21/10/2026. I01 e a conversa
+  // real de 20/10/2026 com nome e dados trocados (pedido do Lucas).
+  {
+    id: 'I01',
+    titulo: 'idoso que mora sozinho e "foi abandonado" recebe "não entendi" e vai para a equipe sem a renda',
+    gravidade: 'alta',
+    falas: ['quero o loas do idoso', 'Joaquim, tenho 71 anos', 'Eu moro sozinho', 'eu moro sozinho', 'Fui abandonado'],
+    confere: (r) => {
+      const tudo = r.turnos.flatMap((t) => t.robo).join(' ')
+      return /não entendi/.test(tudo) || r.sinais.some((s) => s.tipo === 'encaminhar') ? `robô: "${r.ultima}"` : ''
+    },
+  },
+  {
+    id: 'I02',
+    titulo: 'CadÚnico corrigido na hora ("Não" e logo "minha família tem sim") fica como "não tem"',
+    gravidade: 'media',
+    falas: ['quero o loas do idoso', 'Joaquim, tenho 71 anos', 'moro sozinho', 'nada', 'não', 'Não', 'Minha família tem sim'],
+    confere: (r) => (r.ficha.cadunico !== 'atualizado' ? `CadÚnico gravado: ${r.ficha.cadunico ?? '(nada)'}; robô: "${r.ultima}"` : ''),
+  },
 ]
 
 const linhas: string[] = []
@@ -295,4 +328,5 @@ for (const s of S) {
 console.log(linhas.join('\n'))
 console.log(`\n${confirmadas} de ${S.length} suspeitas confirmadas`)
 mkdirSync('tests/painel/resultados', { recursive: true })
-writeFileSync('tests/painel/resultados/suspeitas.json', JSON.stringify(json, null, 2))
+writeFileSync(`tests/painel/resultados/${process.env.ROBO ? 'suspeitas-outra-versao' : 'suspeitas'}.json`, JSON.stringify(json, null, 2))
+if (process.argv.includes('--teste') && confirmadas > 0) process.exit(1)

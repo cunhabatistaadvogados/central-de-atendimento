@@ -1,0 +1,45 @@
+FAMÍLIA: oi bom dia
+ROBÔ: Oi! Aqui é a Mary, do atendimento automático do escritório Cunha, Batista & Advogados (OAB/SP 9.894). Se preferir falar com uma pessoa, é só pedir. Me conta seu nome e para quem seria o benefício?
+  [sinal] {"tipo":"etapa","etapa":"qualificacao"}
+FAMÍLIA: vi o anuncio de vcs sobre o loas pra autista
+ROBÔ: Prazer, Vi. O benefício seria para você, para seu filho(a) ou para outra pessoa da família?
+  [sinal] {"tipo":"origem","origem":"anuncio","campanha":"autista"}
+FAMÍLIA: kkk meu nome e camila
+ROBÔ: Desculpa, não entendi direito. Pode me explicar com outras palavras?
+FAMÍLIA: e pro meu irmao, ele tem 30 anos
+ROBÔ: Antes de seguir: o que você contar sobre saúde fica só com a equipe do escritório, para analisar o seu caso. Ele tem laudo do médico com o diagnóstico, e de que ano é?
+FAMÍLIA: tem sim
+ROBÔ: Como é a rotina dele: precisa de ajuda nas coisas do dia, faz terapia ou toma remédio?
+FAMÍLIA: de 2024 do neuro
+ROBÔ: Entendo. O acompanhamento é pelo SUS ou por plano/particular?
+FAMÍLIA: pelo sus, no caps
+ROBÔ: A família tem o CadÚnico, o cadastro do CRAS, atualizado nos últimos 2 anos?
+FAMÍLIA: tem sim atualizei esse ano
+ROBÔ: Ótimo. Quem mora com ele na mesma casa?
+FAMÍLIA: ele mora com meus pais
+ROBÔ: E quanto entra de dinheiro na casa por mês, somando todo mundo, mais ou menos?
+FAMÍLIA: minha mae tem 68 e meu pai 70
+ROBÔ: E quanto entra de dinheiro por mês na casa, mais ou menos? Se não entra nada, pode dizer "nada".
+FAMÍLIA: minha mae recebe o loas de idosa 1621
+ROBÔ: Entendi. Ele já recebe algum benefício do INSS, como pensão ou aposentadoria?
+FAMÍLIA: e meu pai e aposentado, 1 salario tb
+ROBÔ: Vocês já pediram o BPC no INSS alguma vez?
+FAMÍLIA: nunca pedimos pq a gente achou q a renda da casa era alta
+ROBÔ: Vi, pelo que você me contou, seu caso se qualifica sim para o atendimento com o nosso advogado de BPC, o Dr. André. Vamos marcar: hoje à tarde ou amanhã de manhã é melhor para você?
+  [sinal] {"tipo":"encaminhar","motivo":"Qualificação completa"}
+  [sinal] {"tipo":"etapa","etapa":"qualificado"}
+FAMÍLIA: com a renda dos meus pais ele consegue?
+ROBÔ: Essa resposta depende do caso, e quem avalia é o advogado. Já anotei sua pergunta para ele. Só para confirmar: prefere hoje à tarde ou amanhã de manhã?
+  [sinal] {"tipo":"duvida","texto":"com a renda dos meus pais ele consegue?"}
+FAMÍLIA: amanha de manha
+ROBÔ: Combinado, amanhã de manhã. Para não perder tempo, a equipe já te manda o contrato e a lista de documentos antes da conversa. Pode ser?
+  [sinal] {"tipo":"reuniao","quando":"amanhã de manhã"}
+  [sinal] {"tipo":"etapa","etapa":"reuniao"}
+FAMÍLIA: e meu nome e camila nao vi kkk
+ROBÔ: Tudo bem. A equipe te chama no horário combinado e explica tudo antes de qualquer contrato.
+  [sinal] {"tipo":"encaminhar","motivo":"Reunião amanhã de manhã: explicar tudo antes de qualquer contrato"}
+
+ESTADO
+  pausado: true (Reunião marcada: contrato só depois da conversa)
+  próxima pergunta do robô: (nenhuma)
+  ficha: {"nome":"Vi","origem":"anuncio","campanha":"autista","diagnostico":"Autismo (TEA)","para":"familiar","quem":"seu irmão","pronome":"ele","idade":30,"laudo":"tem","rotina":"de 2024 do neuro","tratamento":"SUS","tratamentoTexto":"SUS","cadunico":"atualizado","pessoasCasa":3,"casaTexto":"ele mora com meus pais","area":"idoso","rendaCasa":1621,"rendaTexto":"minha mae recebe o loas de idosa 1621","outrosBeneficios":"sim","outrosBeneficiosTexto":"minha mae recebe o loas de idosa 1621","anotacoes":["A renda inclui aposentadoria ou BPC de até 1 salário mínimo de outra pessoa da casa. Se essa pessoa for idosa (65+) ou com deficiência, pela LOAS (art. 20, §14) esse valor não entra na conta do INSS. Conferir."],"beneficioProprio":"nao","pedidoAnterior":"nao","duvidas":["com a renda dos meus pais ele consegue?"],"horario":"amanhã de manhã"}

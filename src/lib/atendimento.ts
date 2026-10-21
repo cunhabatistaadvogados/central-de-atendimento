@@ -1,7 +1,23 @@
-import { contratoComParteFixa, novoEstado, primeiroNome, responder, type Etapa, type Sinal } from '@motor/robo'
+import { contratoComParteFixa, ehIdoso, novoEstado, primeiroNome, responder, temLaudo, type Etapa, type Ficha, type Sinal } from '@motor/robo'
 import { dadosVazios } from './contrato'
-import { ESCRITORIO, etapa as infoEtapa } from './escritorio'
+import { ESCRITORIO, ORIGENS, etapa as infoEtapa } from './escritorio'
 import type { Cliente, Contrato, Evento, Mensagem, Origem } from './tipos'
+
+/** Publico da campanha (Lucas, 21/10/2026): pela frase da 1a mensagem ou pelo que a ficha ja sabe. */
+export function publicos(f: Ficha): ('Autista' | 'Idoso')[] {
+  const p: ('Autista' | 'Idoso')[] = []
+  if (f.campanha === 'autista' || /Autismo/.test(f.diagnostico ?? '')) p.push('Autista')
+  if (f.campanha === 'idoso' || f.area === 'idoso' || ehIdoso(f)) p.push('Idoso')
+  return p
+}
+
+/** Laudo como a equipe le: de qualquer ano conta como "tem" (D1 do Raio-X). */
+export function textoDoLaudo(f: Ficha): string | undefined {
+  if (temLaudo(f)) return `Tem${f.laudoAno ? `, de ${f.laudoAno}` : ''}`
+  if (f.laudo === 'nao_sei') return 'Não sabe (sem valores até a equipe ver)'
+  if (f.laudo === 'sem') return 'Não tem'
+  return undefined
+}
 
 /** uuid: o mesmo id serve na demonstracao e como chave no banco real. */
 export function id(): string {
@@ -32,7 +48,7 @@ export function novoCliente(telefone: string, origem: Origem, em: string, nome =
     robo: novoEstado(),
     mensagens: [],
     pendencias: [],
-    eventos: [evento('sistema', `Contato chegou pelo ${origem === 'site' ? 'site' : origem === 'anuncio' ? 'anúncio' : origem}`, em)],
+    eventos: [evento('sistema', `Contato chegou pelo ${(ORIGENS[origem] ?? origem).toLowerCase()}`, em)],
     documentos: { rg: false, cpf: false, comprovante: false, cadunico: false, laudo: false },
     naoLidas: 0,
   }
@@ -77,6 +93,30 @@ export function aplicarSinais(c: Cliente, sinais: Sinal[], em: string): Cliente 
     }
     if (s.tipo === 'encaminhar') {
       cli = { ...cli, eventos: [...cli.eventos, evento('robo', `Encaminhado à equipe: ${s.motivo}`, em)] }
+    }
+    if (s.tipo === 'duvida') {
+      cli = { ...cli, eventos: [...cli.eventos, evento('robo', `Dúvida para o advogado: "${s.texto}"`, em)] }
+    }
+    if (s.tipo === 'pendencia_resolvida') {
+      cli = {
+        ...cli,
+        pendencias: cli.pendencias.map((p) => (p.texto === s.texto ? { ...p, resolvida: true } : p)),
+        eventos: [...cli.eventos, evento('robo', `Pendência resolvida pela família: ${s.texto}`, em)],
+      }
+    }
+    // Origem lida na conversa so troca o "anuncio" sem plataforma.
+    if (s.tipo === 'origem' && s.origem && s.origem !== 'anuncio' && cli.origem === 'anuncio') {
+      cli = { ...cli, origem: s.origem, eventos: [...cli.eventos, evento('sistema', `Origem: ${ORIGENS[s.origem] ?? s.origem} (pela mensagem da família)`, em)] }
+    }
+    // Quem desiste vai para "Perdido" e nao recebe mais retorno automatico (C28).
+    if (s.tipo === 'encerrar') {
+      cli = {
+        ...cli,
+        etapa: 'perdido',
+        motivoPerda: 'Desistiu do pedido',
+        pendencias: cli.pendencias.map((p) => ({ ...p, resolvida: true })),
+        eventos: [...cli.eventos, evento('etapa', 'Robô encerrou: a família desistiu', em)],
+      }
     }
     if (s.tipo === 'reuniao') {
       cli = {

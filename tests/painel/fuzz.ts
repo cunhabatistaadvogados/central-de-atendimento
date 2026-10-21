@@ -1,6 +1,7 @@
 // Fuzz de conversas (painel de avaliacao, 20/10/2026).
 //
 //   node tests/painel/fuzz.ts [quantas=3000] [semente=20261020]
+//   ROBO=<arquivo> node tests/painel/fuzz.ts   as mesmas familias noutra versao (o "antes")
 //
 // Milhares de familias inventadas conversam com o robo de verdade, cada uma
 // com uma verdade e um jeito de escrever. Em cada resposta do robo valem as
@@ -9,9 +10,16 @@
 // encolhe o caso), pronta para virar teste.
 import fc from 'fast-check'
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { contratoComParteFixa, novoEstado, responder, type EstadoRobo, type Pergunta } from '../../supabase/functions/_shared/robo.ts'
+import { resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import type { EstadoRobo, Pergunta } from '../../supabase/functions/_shared/robo.ts'
 import { ehIdosa, respostas, ruido, sujar, verdade, type Ruido, type Verdade } from './familias.ts'
 import { conferir, conferirConversa, type Gravidade, type Violacao } from './regras.ts'
+
+type Robo = typeof import('../../supabase/functions/_shared/robo.ts')
+const { contratoComParteFixa, novoEstado, responder } = (await import(
+  process.env.ROBO ? pathToFileURL(resolve(process.env.ROBO)).href : '../../supabase/functions/_shared/robo.ts'
+)) as Robo
 
 const AGORA = new Date('2026-10-19T13:00:00Z') // segunda, 10h em Santos
 const ABERTURAS = ['oi', 'Boa tarde', 'olá, vi o anúncio do BPC']
@@ -69,14 +77,29 @@ export function rodar(c: Caso) {
   const paraEsperado = v.para === 'mae' || v.para === 'pai' ? 'familiar' : v.para
   if (f.para && f.para !== paraEsperado) errado('entendeu errado para quem é o benefício', 'alta', `${f.para} (era ${paraEsperado})`)
   if (f.idade !== undefined && f.idade !== v.idade) errado('gravou a idade errada', 'alta', `${f.idade} (era ${v.idade})`)
-  if (f.laudo && !idosa && f.laudo !== v.laudo) errado('entendeu errado o laudo', 'alta', `${f.laudo} (era ${v.laudo})`)
+  // D1: laudo de qualquer ano e "tem laudo"; o robo nao decide se serve.
+  // 'recente' e 'antigo' sao o "tem laudo" do v2.5: comparar so tem, sem e nao sei.
+  const temOuNao = (l: string) => (l === 'recente' || l === 'antigo' ? 'tem' : l)
+  if (f.laudo && !idosa && v.diagnostico !== 'nenhum' && temOuNao(f.laudo) !== temOuNao(v.laudo)) errado('entendeu errado o laudo', 'alta', `${f.laudo} (era ${v.laudo})`)
   if (f.cadunico && f.cadunico !== v.cadunico) errado('entendeu errado o CadÚnico', 'media', `${f.cadunico} (era ${v.cadunico})`)
   if (f.pessoasCasa !== undefined && f.pessoasCasa !== v.pessoas) errado('gravou errado quantas pessoas moram na casa', 'alta', `${f.pessoasCasa} (era ${v.pessoas})`)
   if (f.rendaCasa !== undefined && Math.abs(f.rendaCasa - v.renda) > 1) errado('gravou a renda errada', 'alta', `${f.rendaCasa} (era ${v.renda})`)
-  if (f.pedidoAnterior && f.pedidoAnterior !== v.pedido) errado('entendeu errado o pedido anterior no INSS', 'media', `${f.pedidoAnterior} (era ${v.pedido})`)
-  if (f.outrosBeneficios && (f.outrosBeneficios === 'sim') !== (v.outros !== 'nao')) errado('entendeu errado os outros benefícios da casa', 'media', `${f.outrosBeneficios} (era ${v.outros})`)
-  if (f.laudo && contratoComParteFixa(f) !== (!idosa && v.laudo !== 'recente'))
+  if (f.pedidoAnterior && f.pedidoAnterior !== (v.pedido === 'negado_recente' ? 'negado' : v.pedido)) errado('entendeu errado o pedido anterior no INSS', 'media', `${f.pedidoAnterior} (era ${v.pedido})`)
+  // Bolsa Familia nao e aposentadoria, pensao nem BPC: nao conta como "outro beneficio da casa".
+  if (f.outrosBeneficios && (f.outrosBeneficios === 'sim') !== (v.outros === 'aposentadoria' || v.outros === 'bpc'))
+    errado('entendeu errado os outros benefícios da casa', 'media', `${f.outrosBeneficios} (era ${v.outros})`)
+  if (f.beneficioProprio && (f.beneficioProprio === 'sim') !== (v.recebe === 'pensao')) errado('entendeu errado se a própria pessoa já recebe benefício', 'alta', `${f.beneficioProprio} (era ${v.recebe})`)
+  // D1: o valor fixo so existe sem laudo e pela fase medica parceira.
+  if (f.laudo && !idosa && (f.laudo !== 'sem' || f.faseMedica) && contratoComParteFixa(f) !== (v.laudo === 'sem' && v.aceitaFaseMedica))
     errado('versão do contrato errada (com ou sem os R$ 1.000)', 'critica', `parte fixa ${contratoComParteFixa(f)}`)
+  // D4: "se qualifica sim" so no fechamento limpo, sem impedimento.
+  if (/se qualifica sim/.test(todas) && (v.recebe === 'pensao' || (v.diagnostico === 'nenhum' && !idosa)))
+    errado('falsa expectativa: "se qualifica sim" com impedimento', 'critica', turnos.at(-1)?.cliente ?? '')
+  // D2: medico parceiro so para quem tem doenca e nao tem laudo.
+  if (/médico parceiro/.test(todas) && (idosa || v.diagnostico === 'nenhum' || v.laudo !== 'sem'))
+    errado('ofereceu o médico parceiro a quem não devia', 'alta', `laudo ${v.laudo}, diagnóstico ${v.diagnostico}`)
+  // D7: negativa ha menos de 30 dias vira prioridade.
+  if (f.diasNegado !== undefined && f.diasNegado <= 30 && !/como prioridade/.test(todas)) errado('negativa recente sem prioridade', 'alta', f.tempoNegado ?? '')
   return { violacoes, turnos, ficha: f }
 }
 
@@ -88,8 +111,10 @@ const quantas = Number(process.argv[2] ?? 3000)
 const semente = Number(process.argv[3] ?? 20261020)
 const amostra = fc.sample(caso, { numRuns: quantas, seed: semente })
 const porRegra = new Map<string, { gravidade: Gravidade; vezes: number; conversas: number }>()
+let comDefeito = 0
 for (const c of amostra) {
   const { violacoes } = rodar(c)
+  if (violacoes.length) comDefeito += 1
   const vistas = new Set<string>()
   for (const x of violacoes) {
     const r = porRegra.get(x.regra) ?? { gravidade: x.gravidade, vezes: 0, conversas: 0 }
@@ -99,6 +124,9 @@ for (const c of amostra) {
     porRegra.set(x.regra, r)
   }
 }
+
+// --teste (teste de mutacao): so diz se alguma familia achou defeito, sem encolher os casos.
+if (process.argv.includes('--teste')) process.exit(comDefeito ? 1 : 0)
 
 const ordem: Gravidade[] = ['critica', 'alta', 'media', 'baixa']
 const achados = [...porRegra.entries()].sort((a, b) => ordem.indexOf(a[1].gravidade) - ordem.indexOf(b[1].gravidade) || b[1].conversas - a[1].conversas)
@@ -116,4 +144,5 @@ for (const [regra, r] of achados) {
 }
 if (!achados.length) console.log('Nenhuma regra quebrada.')
 mkdirSync('tests/painel/resultados', { recursive: true })
-writeFileSync('tests/painel/resultados/fuzz.json', JSON.stringify({ quantas, semente, achados: relatorio }, null, 2))
+console.log(`\n${comDefeito} de ${quantas} conversas com algum defeito`)
+writeFileSync(`tests/painel/resultados/${process.env.ROBO ? 'fuzz-outra-versao' : 'fuzz'}.json`, JSON.stringify({ quantas, semente, comDefeito, achados: relatorio }, null, 2))

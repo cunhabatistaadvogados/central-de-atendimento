@@ -75,6 +75,8 @@ export function etapa(chave: Etapa) {
 
 export const ORIGENS: Record<string, string> = {
   anuncio: 'Anúncio',
+  meta: 'Meta',
+  google: 'Google',
   site: 'Site',
   instagram: 'Instagram',
   indicacao: 'Indicação',

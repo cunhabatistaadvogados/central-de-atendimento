@@ -1,9 +1,10 @@
 import type { Etapa } from '@motor/robo'
 import { Search, UsersRound } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { Avatar, ChipEtapa, ChipOrigem, Vazio } from '@/components/ui'
+import { Avatar, ChipEtapa, ChipOrigem, ChipPublico, Vazio } from '@/components/ui'
+import { publicos, textoDoLaudo } from '@/lib/atendimento'
 import { ETAPAS } from '@/lib/escritorio'
-import { dinheiro, rendaPorPessoa } from '@motor/robo'
+import { dinheiro, rendaPorPessoa, temLaudo } from '@motor/robo'
 import { haQuanto } from '@/lib/formato'
 import { useDados } from '@/lib/store'
 
@@ -61,6 +62,9 @@ export default function Clientes({ abrirCliente }: { abrirCliente: (id: string) 
                           <p className="font-bold">{c.nome || 'Sem nome ainda'}</p>
                           <p className="flex items-center gap-1.5 text-xs text-slate-400">
                             {c.telefone || 'sem WhatsApp'} <ChipOrigem origem={c.origem} />
+                            {publicos(f).map((p) => (
+                              <ChipPublico key={p} publico={p} />
+                            ))}
                           </p>
                         </div>
                       </div>
@@ -70,7 +74,7 @@ export default function Clientes({ abrirCliente }: { abrirCliente: (id: string) 
                       {f.idade !== undefined && <span className="text-slate-400"> · {f.idade} anos</span>}
                       {f.diagnostico && <span className="block text-[11px] text-slate-400">{f.diagnostico}</span>}
                     </td>
-                    <td className="px-3 py-3 text-xs">{f.laudo === 'recente' ? <span className="font-bold text-emerald-700">Recente</span> : f.laudo ? <span className="font-bold text-orange-700">{f.laudo === 'antigo' ? 'Antigo' : 'Não tem'}</span> : '-'}</td>
+                    <td className="px-3 py-3 text-xs">{f.laudo ? <span className={`font-bold ${temLaudo(f) ? 'text-emerald-700' : 'text-orange-700'}`}>{textoDoLaudo(f)?.replace(' (sem valores até a equipe ver)', '')}</span> : '-'}</td>
                     <td className="px-3 py-3 text-xs text-slate-600">{rpp !== undefined ? dinheiro(rpp) : '-'}</td>
                     <td className="px-3 py-3">
                       <ChipEtapa etapa={c.etapa} />

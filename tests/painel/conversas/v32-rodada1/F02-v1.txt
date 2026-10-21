@@ -1,0 +1,48 @@
+FAMÍLIA: bom dia. vi um anuncio de loas pra idoso. antes de qualquer coisa, isso é golpe?
+ROBÔ: Oi! Aqui é a Mary, do atendimento automático do escritório Cunha, Batista & Advogados (OAB/SP 9.894). Se preferir falar com uma pessoa, é só pedir.
+ROBÔ: Somos o escritório Cunha, Batista & Advogados, OAB/SP 9.894, com sede em Santos/SP, e atendemos famílias em todo o Brasil. Pode conferir no site https://cunhabatistaadv.com/ e no Instagram @cunhabatistaadvogados. Nós nunca pedimos senha, e tudo fica por escrito no contrato. Quer que eu continue?
+  [sinal] {"tipo":"etapa","etapa":"qualificacao"}
+  [sinal] {"tipo":"origem","origem":"anuncio","campanha":"idoso"}
+FAMÍLIA: ok, pode continuar
+ROBÔ: Me conta seu nome e quantos anos tem a pessoa que precisa do benefício?
+FAMÍLIA: Sérgio. é pra minha mãe, ela tem 66 anos
+ROBÔ: Prazer, Sérgio. Quem mora com ela na mesma casa?
+FAMÍLIA: ela mora comigo e com a minha esposa
+ROBÔ: E quanto entra de dinheiro na casa por mês, somando todo mundo, mais ou menos?
+FAMÍLIA: pra que vcs precisam saber da renda?
+ROBÔ: E quanto entra de dinheiro por mês na casa, mais ou menos? Se não entra nada, pode dizer "nada".
+FAMÍLIA: eu e minha esposa ganhamos uns 4 mil. ela mesma não ganha nada
+ROBÔ: Entendi. Ela já recebe aposentadoria, pensão ou outro benefício do INSS?
+FAMÍLIA: não, ela nunca recebeu nada
+ROBÔ: Alguém da casa recebe aposentadoria, pensão ou BPC, e de quanto, mais ou menos?
+FAMÍLIA: não, só o nosso salário
+ROBÔ: A família tem o CadÚnico, aquele cadastro do CRAS, atualizado nos últimos 2 anos?
+FAMÍLIA: ela tem, mas fez faz uns 3 anos, nunca mais atualizou
+ROBÔ: Sem problema. A atualização é feita no CRAS da sua cidade, de graça, com RG, CPF e comprovante de endereço de todos da casa. Dá para ir essa semana?
+  [sinal] {"tipo":"pendencia","texto":"atualizar o CadÚnico","dias":7}
+FAMÍLIA: dá sim
+ROBÔ: Combinado. Ela tem CNH, a identidade nova (CIN) ou título de eleitor com digital cadastrada?
+FAMÍLIA: vcs são de onde mesmo? tem escritório físico?
+ROBÔ: Somos o escritório Cunha, Batista & Advogados, OAB/SP 9.894, com sede em Santos/SP, e atendemos famílias em todo o Brasil. Pode conferir no site https://cunhabatistaadv.com/ e no Instagram @cunhabatistaadvogados. Nós nunca pedimos senha, e tudo fica por escrito no contrato. Quer que eu continue?
+FAMÍLIA: pode
+ROBÔ: Ela tem CNH, a identidade nova (CIN) ou título de eleitor com digital cadastrada?
+FAMÍLIA: tem o título, fez a biometria na eleição
+ROBÔ: Ela já pediu esse benefício no INSS alguma vez?
+FAMÍLIA: nunca pediu
+ROBÔ: Sérgio, vou passar seu caso para o advogado olhar com cuidado, porque cada detalhe conta. Hoje à tarde ou amanhã de manhã é melhor para te chamarem?
+  [sinal] {"tipo":"encaminhar","motivo":"Qualificação completa: advogado avalia"}
+  [sinal] {"tipo":"etapa","etapa":"qualificado"}
+FAMÍLIA: antes disso, tem que pagar alguma coisa adiantado?
+ROBÔ: Só para confirmar: prefere hoje à tarde ou amanhã de manhã?
+FAMÍLIA: amanhã de manhã
+ROBÔ: Combinado, amanhã de manhã. Para não perder tempo, a equipe já te manda o contrato e a lista de documentos antes da conversa. Pode ser?
+  [sinal] {"tipo":"reuniao","quando":"amanhã de manhã"}
+  [sinal] {"tipo":"etapa","etapa":"reuniao"}
+FAMÍLIA: não, prefiro conversar primeiro antes de ver contrato
+ROBÔ: Tudo bem. A equipe te chama no horário combinado e explica tudo antes de qualquer contrato.
+  [sinal] {"tipo":"encaminhar","motivo":"Reunião amanhã de manhã: explicar tudo antes de qualquer contrato"}
+
+ESTADO
+  pausado: true (Reunião marcada: contrato só depois da conversa)
+  próxima pergunta do robô: (nenhuma)
+  ficha: {"area":"idoso","origem":"anuncio","campanha":"idoso","nome":"Sérgio","para":"familiar","quem":"sua mãe","pronome":"ela","idade":66,"pessoasCasa":2,"casaTexto":"ela mora comigo e com a minha esposa","rendaCasa":4000,"rendaTexto":"eu e minha esposa ganhamos uns 4 mil. ela mesma não ganha nada","beneficioProprio":"nao","outrosBeneficios":"nao","cadunico":"desatualizado","biometria":"sim","pedidoAnterior":"nao","horario":"amanhã de manhã"}

@@ -1,0 +1,36 @@
+FAMÍLIA: vcs sao confiaveis msm?
+ROBÔ: Oi! Aqui é a Mary, do atendimento automático do escritório Cunha, Batista & Advogados (OAB/SP 9.894). Se preferir falar com uma pessoa, é só pedir. Me conta seu nome e para quem seria o benefício?
+  [sinal] {"tipo":"etapa","etapa":"qualificacao"}
+FAMÍLIA: minha mae tem 66 anos e nao tem renda nenhuma
+ROBÔ: E qual o seu nome?
+FAMÍLIA: sergio. mas vcs sao de onde?
+ROBÔ: Somos o escritório Cunha, Batista & Advogados, OAB/SP 9.894, com sede em Santos/SP, e atendemos famílias em todo o Brasil. Pode conferir no site https://cunhabatistaadv.com/ e no Instagram @cunhabatistaadvogados. Nós nunca pedimos senha, e tudo fica por escrito no contrato. Quer que eu continue?
+FAMÍLIA: ta bom pode
+ROBÔ: Prazer, Ta. Quem mora com ela na mesma casa?
+FAMÍLIA: meu nome e sergio
+ROBÔ: E quantas pessoas são ao todo na casa, contando ela?
+FAMÍLIA: ela mora cmg, sou casado, minha mulher tb mora la
+ROBÔ: Ela já recebe aposentadoria, pensão ou outro benefício do INSS?
+FAMÍLIA: nao nada
+ROBÔ: A família tem o CadÚnico, aquele cadastro do CRAS, atualizado nos últimos 2 anos?
+FAMÍLIA: tem mas ta desatualizado, uns 3 anos
+ROBÔ: Sem problema. A atualização é feita no CRAS da sua cidade, de graça, com RG, CPF e comprovante de endereço de todos da casa. Dá para ir essa semana?
+  [sinal] {"tipo":"pendencia","texto":"atualizar o CadÚnico","dias":7}
+FAMÍLIA: essa semana nao, so semana q vem
+ROBÔ: Combinado. Ela tem CNH, a identidade nova (CIN) ou título de eleitor com digital cadastrada?
+FAMÍLIA: pq vc quer saber de digital?
+ROBÔ: Ela já pediu esse benefício no INSS alguma vez?
+FAMÍLIA: nunca
+ROBÔ: Ta, pelo que você me contou, o caso dela se qualifica sim para o atendimento com o nosso advogado de BPC, o Dr. André. Vamos marcar: hoje à tarde ou amanhã de manhã é melhor para vocês?
+  [sinal] {"tipo":"encaminhar","motivo":"Qualificação completa"}
+  [sinal] {"tipo":"etapa","etapa":"qualificado"}
+FAMÍLIA: mas vc nao respondeu, pra que a digital?
+ROBÔ: Só para confirmar: prefere hoje à tarde ou amanhã de manhã?
+FAMÍLIA: quero falar com uma pessoa de verdade
+ROBÔ: Claro, já aviso a equipe.
+  [sinal] {"tipo":"encaminhar","motivo":"pediu pessoa"}
+
+ESTADO
+  pausado: true (pediu pessoa)
+  próxima pergunta do robô: (nenhuma)
+  ficha: {"para":"familiar","quem":"sua mãe","pronome":"ela","idade":66,"rendaCasa":0,"rendaTexto":"minha mae tem 66 anos e nao tem renda nenhuma","nome":"Ta","casaTexto":"meu nome e sergio","pessoasCasa":1,"anotacoes":["Na casa há parente que a LOAS pode não contar (genro, nora, filho casado, avós, tios): conferir quem entra na conta da renda."],"beneficioProprio":"nao","cadunico":"desatualizado","biometria":"sim","pedidoAnterior":"nao"}

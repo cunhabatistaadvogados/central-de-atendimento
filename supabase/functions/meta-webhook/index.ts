@@ -23,8 +23,24 @@ interface MensagemMeta {
   text?: { body: string }
   button?: { text: string }
   interactive?: { button_reply?: { title: string }; list_reply?: { title: string } }
-  referral?: unknown
+  /** Anuncio de clique para WhatsApp do Meta (so na 1a mensagem que veio dele). */
+  referral?: { source_url?: string; source_id?: string; source_type?: string; headline?: string; body?: string; ctwa_clid?: string }
 }
+
+// Origem do contato novo (etiquetas pedidas pelo Lucas em 21/10/2026). O
+// anuncio do Meta traz o referral; o Google nao manda nada, entao vale a
+// frase pronta do link da campanha ("vi no Google..."). O robo tambem le a
+// origem e corrige depois, se o contato ficou como "anuncio".
+function origemDoContato(m: MensagemMeta, texto: string): string {
+  if (m.referral) return 'meta'
+  const t = texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  if (/\bgoogle\b/.test(t)) return 'google'
+  if (/advogad[oa] previdenci|\bpelo site\b|\bno site\b/.test(t)) return 'site'
+  if (/\b(instagram|facebook)\b/.test(t)) return 'meta'
+  return 'anuncio'
+}
+
+const NOME_DA_ORIGEM: Record<string, string> = { meta: 'anúncio do Meta', google: 'Google', site: 'site', anuncio: 'anúncio' }
 
 function textoDaMensagem(m: MensagemMeta): string {
   if (m.type === 'text') return m.text?.body ?? ''
@@ -46,8 +62,11 @@ async function processar(m: MensagemMeta) {
   // Cliente por telefone (cria na primeira mensagem).
   let { data: cliente } = await banco.from('clientes').select('*').eq('telefone', m.from).maybeSingle()
   if (!cliente) {
-    const origem = m.referral ? 'anuncio' : /advogad[oa] previdenci/i.test(texto) ? 'site' : 'anuncio'
-    const criado = await banco.from('clientes').insert({ telefone: m.from, origem, robo: novoEstado() }).select('*').single()
+    const origem = origemDoContato(m, texto)
+    const anuncio = m.referral
+      ? { titulo: m.referral.headline ?? null, texto: m.referral.body ?? null, link: m.referral.source_url ?? null, id: m.referral.source_id ?? null, tipo: m.referral.source_type ?? null, ctwa_clid: m.referral.ctwa_clid ?? null }
+      : null
+    const criado = await banco.from('clientes').insert({ telefone: m.from, origem, anuncio, robo: novoEstado() }).select('*').single()
     if (criado.error) {
       // Duas mensagens juntas do mesmo numero novo: a outra criou primeiro.
       // Em 19/10/2026 o erro real era permissao da tabela, e o log so dizia
@@ -58,7 +77,7 @@ async function processar(m: MensagemMeta) {
       cliente = de_novo.data
     } else {
       cliente = criado.data
-      await evento(cliente.id, 'sistema', `Contato chegou pelo ${origem === 'site' ? 'site' : 'anúncio'}`)
+      await evento(cliente.id, 'sistema', `Contato chegou pelo ${NOME_DA_ORIGEM[origem]}${anuncio?.titulo ? `: "${anuncio.titulo}"` : ''}`)
     }
   }
   if (!cliente) throw new Error(`cliente ${m.from} nao encontrado nem criado`)
@@ -75,7 +94,26 @@ async function processar(m: MensagemMeta) {
 
   let etapa: Etapa = cliente.etapa
   let reuniao = cliente.reuniao
+  let origem: string = cliente.origem
+  let motivoPerda: string | null = cliente.motivo_perda ?? null
   for (const s of r.sinais) {
+    // Origem lida na conversa so troca o "anuncio" sem plataforma.
+    if (s.tipo === 'origem' && s.origem && s.origem !== 'anuncio' && origem === 'anuncio') {
+      origem = s.origem
+      await evento(cliente.id, 'sistema', `Origem: ${NOME_DA_ORIGEM[s.origem] ?? s.origem} (pela mensagem da família)`)
+    }
+    if (s.tipo === 'duvida') await evento(cliente.id, 'robo', `Dúvida para o advogado: "${s.texto}"`)
+    if (s.tipo === 'pendencia_resolvida') {
+      await banco.from('pendencias').update({ resolvida: true }).eq('cliente_id', cliente.id).eq('texto', s.texto).eq('resolvida', false)
+      await evento(cliente.id, 'robo', `Pendência resolvida pela família: ${s.texto}`)
+    }
+    // Quem desiste vai para "Perdido" e nao recebe mais retorno automatico (C28).
+    if (s.tipo === 'encerrar') {
+      etapa = 'perdido'
+      motivoPerda = 'Desistiu do pedido'
+      await banco.from('pendencias').update({ resolvida: true }).eq('cliente_id', cliente.id).eq('resolvida', false)
+      await evento(cliente.id, 'etapa', 'Robô encerrou: a família desistiu')
+    }
     if (s.tipo === 'etapa' && etapa !== 'perdido' && ORDEM.indexOf(s.etapa) > ORDEM.indexOf(etapa)) {
       etapa = s.etapa
       await evento(cliente.id, 'etapa', `Robô moveu para ${s.etapa}`)
@@ -106,6 +144,8 @@ async function processar(m: MensagemMeta) {
       nome: cliente.nome || r.estado.ficha.nome || '',
       etapa,
       reuniao,
+      origem,
+      motivo_perda: motivoPerda,
       nao_lidas: (cliente.nao_lidas ?? 0) + 1,
       ultima_do_cliente_em: em.toISOString(),
     })

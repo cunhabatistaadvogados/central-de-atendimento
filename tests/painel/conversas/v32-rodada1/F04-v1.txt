@@ -1,0 +1,45 @@
+FAMÍLIA: bom dia, tudo bem?
+ROBÔ: Oi! Aqui é a Mary, do atendimento automático do escritório Cunha, Batista & Advogados (OAB/SP 9.894). Se preferir falar com uma pessoa, é só pedir. Me conta seu nome e para quem seria o benefício?
+  [sinal] {"tipo":"etapa","etapa":"qualificacao"}
+FAMÍLIA: meu filho é autista e a gente pediu o loas e foi negado
+ROBÔ: Me conta seu nome e quantos anos tem seu filho?
+  [sinal] {"tipo":"origem","campanha":"autista"}
+FAMÍLIA: Simone, ele tem 19 anos, o nome dele é Gabriel
+ROBÔ: Prazer, Simone. Faz quanto tempo que negaram?
+FAMÍLIA: faz uns 8 meses, falaram que a renda passava
+ROBÔ: Acontece muito e não encerra o assunto. O advogado vê se cabe novo pedido ou ação. Antes de seguir: o que você contar sobre saúde fica só com a equipe do escritório, para analisar o seu caso. Ele tem laudo do médico com o diagnóstico, e de que ano é?
+FAMÍLIA: tem sim, de 2017
+ROBÔ: Como é a rotina dele: precisa de ajuda nas coisas do dia, faz terapia ou toma remédio?
+FAMÍLIA: laudo vence? é antigo
+ROBÔ: Essa resposta depende do caso, e quem avalia é o advogado. Já anotei sua pergunta para ele. Como é a rotina dele: precisa de ajuda nas coisas do dia, faz terapia ou toma remédio?
+  [sinal] {"tipo":"duvida","texto":"laudo vence? é antigo"}
+FAMÍLIA: ele é jovem aprendiz numa loja, mas precisa de ajuda pra pegar onibus e pra organizar as coisas, toma remedio
+ROBÔ: Entendo. O acompanhamento é pelo SUS ou por plano/particular?
+FAMÍLIA: pelo sus
+ROBÔ: A família tem o CadÚnico, o cadastro do CRAS, atualizado nos últimos 2 anos?
+FAMÍLIA: sim, atualizei em março
+ROBÔ: Ótimo. Quem mora com ele na mesma casa? (pai, mãe, irmãos...)
+FAMÍLIA: só eu e ele
+ROBÔ: E quanto entra de dinheiro na casa por mês, somando todo mundo, mais ou menos?
+FAMÍLIA: eu ganho 700 de diarista e ele ganha 900 de aprendiz
+ROBÔ: Entendi. Ele já recebe algum benefício do INSS, como pensão ou aposentadoria?
+FAMÍLIA: não, só o salário de aprendiz mesmo
+ROBÔ: Alguém da casa recebe aposentadoria, pensão ou BPC, e de quanto, mais ou menos?
+FAMÍLIA: não, ninguém
+ROBÔ: Simone, pelo que você me contou, seu caso se qualifica sim para o atendimento com o nosso advogado de BPC, o Dr. André. Vamos marcar: hoje à tarde ou amanhã de manhã é melhor para você?
+  [sinal] {"tipo":"encaminhar","motivo":"Qualificação completa"}
+  [sinal] {"tipo":"etapa","etapa":"qualificado"}
+FAMÍLIA: mas sendo aprendiz ele ainda pode pedir de novo?
+ROBÔ: Só para confirmar: prefere hoje à tarde ou amanhã de manhã?
+FAMÍLIA: amanhã de manhã é melhor
+ROBÔ: Combinado, amanhã de manhã. Para não perder tempo, a equipe já te manda o contrato e a lista de documentos antes da conversa. Pode ser?
+  [sinal] {"tipo":"reuniao","quando":"amanhã de manhã"}
+  [sinal] {"tipo":"etapa","etapa":"reuniao"}
+FAMÍLIA: pode sim
+ROBÔ: Perfeito, Simone. A equipe já te chama por aqui com o contrato e a lista de documentos.
+  [sinal] {"tipo":"encaminhar","motivo":"Reunião amanhã de manhã: enviar contrato e lista de documentos"}
+
+ESTADO
+  pausado: true (Reunião marcada: equipe envia contrato e documentos)
+  próxima pergunta do robô: (nenhuma)
+  ficha: {"para":"filho","pronome":"ele","campanha":"autista","diagnostico":"Autismo (TEA)","pedidoAnterior":"negado","nome":"Simone","idade":19,"diasNegado":240,"tempoNegado":"faz uns 8 meses, falaram que a renda passava","laudo":"tem","laudoAno":2017,"duvidas":["laudo vence? é antigo"],"rotina":"ele é jovem aprendiz numa loja, mas precisa de ajuda pra pegar onibus e pra organizar as coisas, toma remedio","tratamento":"SUS","tratamentoTexto":"SUS","cadunico":"atualizado","pessoasCasa":2,"casaTexto":"só eu e ele","rendaCasa":1600,"rendaTexto":"eu ganho 700 de diarista e ele ganha 900 de aprendiz","beneficioProprio":"nao","outrosBeneficios":"nao","horario":"amanhã de manhã"}

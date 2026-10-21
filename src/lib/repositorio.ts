@@ -41,6 +41,7 @@ interface LinhaCliente {
   telefone: string | null
   nome: string
   origem: Cliente['origem']
+  anuncio?: Cliente['anuncio'] | null
   etapa: Cliente['etapa']
   robo: Partial<EstadoRobo> | null
   documentos: Partial<Documentos> | null
@@ -207,6 +208,7 @@ function montarClientes(
       nome: l.nome || robo.ficha.nome || '',
       telefone: l.telefone ? formatarTelefone(l.telefone) : '',
       origem: l.origem,
+      anuncio: l.anuncio ?? undefined,
       criadoEm: l.criado_em,
       atualizadoEm: l.atualizado_em,
       etapa: l.etapa,

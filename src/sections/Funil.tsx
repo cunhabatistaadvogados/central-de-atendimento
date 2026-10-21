@@ -1,8 +1,8 @@
-import type { Etapa } from '@motor/robo'
+import { temLaudo, type Etapa } from '@motor/robo'
 import { AlarmClock, Bot, CalendarCheck2, FileSignature } from 'lucide-react'
 import { useState, type DragEvent } from 'react'
-import { Avatar, Modal } from '@/components/ui'
-import { esperandoEquipe } from '@/lib/atendimento'
+import { Avatar, ChipPublico, Modal } from '@/components/ui'
+import { esperandoEquipe, publicos } from '@/lib/atendimento'
 import { ETAPAS } from '@/lib/escritorio'
 import { haQuanto } from '@/lib/formato'
 import { useDados } from '@/lib/store'
@@ -37,7 +37,10 @@ function Cartao({ c, onAbrir }: { c: Cliente; onAbrir: () => void }) {
           </span>
         )}
         {esperandoEquipe(c) && <span className="rounded-full bg-ouro-500 px-2 py-0.5 text-marinho-950">esperando equipe</span>}
-        {f.laudo && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-500">{f.laudo === 'recente' ? 'com laudo' : 'sem laudo'}</span>}
+        {f.laudo && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-500">{temLaudo(f) ? 'com laudo' : f.laudo === 'nao_sei' ? 'laudo?' : 'sem laudo'}</span>}
+        {publicos(f).map((p) => (
+          <ChipPublico key={p} publico={p} />
+        ))}
         {pendencias > 0 && (
           <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-orange-700">
             <AlarmClock className="h-3 w-3" /> {pendencias}

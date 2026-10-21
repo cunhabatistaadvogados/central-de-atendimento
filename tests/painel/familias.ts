@@ -1,7 +1,7 @@
-// Familias simuladas para o fuzz (painel de avaliacao, 20/10/2026). Cada uma
-// tem uma VERDADE (o que a familia de fato tem) e um jeito de escrever; o
-// robo responde a cada pergunta e, no fim, a ficha dele tem de bater com a
-// verdade. Nada de dado real: nomes e numeros inventados.
+// Familias simuladas para o fuzz (painel de avaliacao, 20/10/2026; roteiro
+// v3.2 em 21/10/2026). Cada uma tem uma VERDADE (o que a familia de fato tem)
+// e um jeito de escrever; o robo responde a cada pergunta e, no fim, a ficha
+// dele tem de bater com a verdade. Nada de dado real: nomes e numeros inventados.
 import fc from 'fast-check'
 import type { Pergunta } from '../../supabase/functions/_shared/robo.ts'
 
@@ -9,14 +9,19 @@ export interface Verdade {
   para: 'filho' | 'filha' | 'proprio' | 'mae' | 'pai'
   nome: string
   idade: number
+  /** 'nenhum' em adulto de menos de 65: o caso "e pela idade" (item 1 do Lucas) */
   diagnostico: 'autismo' | 'down' | 'paralisia' | 'epilepsia' | 'nenhum'
-  laudo: 'recente' | 'antigo' | 'sem'
+  /** como a familia descreve o laudo; pelo D1, recente e antigo sao "tem laudo" */
+  laudo: 'recente' | 'antigo' | 'sem' | 'nao_sei'
   aceitaFaseMedica: boolean
   cadunico: 'atualizado' | 'desatualizado' | 'nao'
   pessoas: number
   renda: number
+  /** a propria pessoa do beneficio ja recebe pensao (item 4 do Lucas) */
+  recebe: 'nao' | 'pensao'
   outros: 'nao' | 'aposentadoria' | 'bpc' | 'bolsa'
-  pedido: 'nao' | 'negado' | 'em_analise'
+  biometria: boolean
+  pedido: 'nao' | 'negado' | 'negado_recente' | 'em_analise'
 }
 
 const NOMES = ['Ana', 'Bruna', 'Carla', 'Daniela', 'Elaine', 'Fernanda', 'Josefa', 'Marcos', 'Paulo', 'Rita', 'Sandra', 'Tatiane']
@@ -30,32 +35,42 @@ export const verdade: fc.Arbitrary<Verdade> = fc
     idadeAdulto: fc.integer({ min: 20, max: 64 }),
     idadeIdoso: fc.integer({ min: 65, max: 90 }),
     adultoIdoso: fc.boolean(),
+    adultoSemDoenca: fc.integer({ min: 0, max: 9 }),
     diagnostico: fc.constantFrom('autismo', 'autismo', 'autismo', 'down', 'paralisia', 'epilepsia') as fc.Arbitrary<Verdade['diagnostico']>,
-    laudo: fc.constantFrom('recente', 'antigo', 'sem') as fc.Arbitrary<Verdade['laudo']>,
+    laudo: fc.constantFrom('recente', 'antigo', 'sem', 'sem', 'nao_sei') as fc.Arbitrary<Verdade['laudo']>,
     aceitaFaseMedica: fc.boolean(),
     cadunico: fc.constantFrom('atualizado', 'atualizado', 'desatualizado', 'nao') as fc.Arbitrary<Verdade['cadunico']>,
     pessoas: fc.integer({ min: 1, max: 8 }),
     renda: fc.constantFrom(0, 600, 800, 1000, 1200, 1500, 1621, 2000, 2400, 3000, 4500),
+    recebe: fc.constantFrom('nao', 'nao', 'nao', 'nao', 'pensao') as fc.Arbitrary<Verdade['recebe']>,
     outros: fc.constantFrom('nao', 'nao', 'aposentadoria', 'bpc', 'bolsa') as fc.Arbitrary<Verdade['outros']>,
-    pedido: fc.constantFrom('nao', 'nao', 'negado', 'em_analise') as fc.Arbitrary<Verdade['pedido']>,
+    biometria: fc.boolean(),
+    pedido: fc.constantFrom('nao', 'nao', 'negado', 'negado_recente', 'em_analise') as fc.Arbitrary<Verdade['pedido']>,
   })
   .map((r) => {
     const crianca = r.para === 'filho' || r.para === 'filha'
     const idoso = !crianca && (r.para === 'mae' || r.para === 'pai' || r.adultoIdoso)
-    const idade = crianca ? r.idadeCrianca : idoso ? r.idadeIdoso : r.idadeAdulto
+    // 1 em 10 adultos tem 60 a 64 anos e nenhuma doenca ("e pela idade").
+    const semDoenca = !crianca && !idoso && r.adultoSemDoenca === 0
+    const idade = crianca ? r.idadeCrianca : idoso ? r.idadeIdoso : semDoenca ? 60 + (r.idadeAdulto % 5) : r.idadeAdulto
+    // Familia coerente: crianca nao mora sozinha; quem mora so nao tem "outro da casa".
+    const pessoas = crianca ? Math.max(2, r.pessoas) : r.pessoas
+    const outros = pessoas === 1 || (r.renda === 0 && r.outros !== 'bolsa') ? 'nao' : r.outros
     return {
       para: r.para,
       nome: r.nome,
       idade,
-      diagnostico: idoso ? 'nenhum' : r.diagnostico,
+      diagnostico: idoso || semDoenca ? 'nenhum' : r.diagnostico,
       laudo: r.laudo,
       aceitaFaseMedica: r.aceitaFaseMedica,
       cadunico: r.cadunico,
-      pessoas: r.pessoas,
+      pessoas,
       renda: r.renda,
-      outros: r.outros,
+      recebe: r.recebe,
+      outros,
+      biometria: r.biometria,
       pedido: r.pedido,
-    }
+    } as Verdade
   })
 
 const ehIdosa = (v: Verdade) => v.idade >= 65 && v.para !== 'filho' && v.para !== 'filha'
@@ -66,6 +81,7 @@ export function respostas(p: Pergunta, v: Verdade): string[] {
   const n = v.nome
   const id = v.idade
   const e = ele(v)
+  const proprio = v.para === 'proprio'
   switch (p) {
     case 'abertura_quem':
       return {
@@ -77,61 +93,81 @@ export function respostas(p: Pergunta, v: Verdade): string[] {
       }[v.para]
     case 'nome_idade':
       return [`${n}, ${e} tem ${id} anos`, `me chamo ${n}. ${id} anos`, `${n} e ${e} tem ${EXTENSO[id] ?? id} anos`, `${n}. ${id}`].map((x) =>
-        v.para === 'proprio' ? x.replace(`${e} tem`, 'tenho') : x,
+        proprio ? x.replace(`${e} tem`, 'tenho') : x,
       )
     case 'nome':
       return [n, `meu nome é ${n}`, `${n} Souza`]
     case 'idade':
-      return [`${id}`, `${id} anos`, v.para === 'proprio' ? `tenho ${id} anos` : `${e} tem ${id} anos`, `${EXTENSO[id] ?? id}`]
+      return [`${id}`, `${id} anos`, proprio ? `tenho ${id} anos` : `${e} tem ${id} anos`, `${EXTENSO[id] ?? id}`]
     case 'diagnostico':
       return {
         autismo: ['autismo, desde os 2 anos', `${e} é autista nível 2`, 'TEA', 'transtorno do espectro autista'],
         down: ['síndrome de down', 'tem down desde que nasceu'],
         paralisia: ['paralisia cerebral', 'tem paralisia cerebral, é cadeirante'],
         epilepsia: ['epilepsia, tem crises toda semana', 'epilepsia grave'],
-        nenhum: ['nenhum, é pela idade', 'não tem doença, é pela idade mesmo'],
+        nenhum: ['nenhuma, é pela idade', 'não tenho doença, é pela idade mesmo', 'não'],
       }[v.diagnostico]
     case 'laudo':
     case 'laudo_para_preco':
       return {
         recente: ['sim, tem', 'tem laudo sim, do mês passado', 'sim, de 2026', 'tem sim'],
-        antigo: ['tem mas é de 2021', 'tem, mas é antigo', 'tem um laudo velho'],
+        antigo: ['tem mas é de 2021', 'tem, mas é antigo', 'tem um laudo velho', 'tem, de 2017'],
         sem: ['não tem', 'ainda não, está na fila do SUS', 'nao'],
+        nao_sei: ['não sei', 'não lembro se tem'],
       }[v.laudo]
     case 'fase_medica':
-      return v.aceitaFaseMedica ? ['quero saber', 'sim', 'como funciona?'] : ['não, obrigado', 'agora não']
+      return v.aceitaFaseMedica ? ['quero saber', 'sim', 'como funciona?', 'pode ser'] : ['não, obrigado', 'agora não', 'não precisa de médico, eu quero saber é do benefício']
     case 'rotina':
       return ['precisa de ajuda pra tudo, faz terapia', 'toma remédio e faz fono', 'precisa de ajuda pra comer e tomar banho']
     case 'tratamento':
       return ['pelo SUS', 'plano de saúde', 'particular', 'no CAPS']
     case 'cadunico':
       return {
-        atualizado: ['sim, atualizado', 'tem sim, fiz esse ano', 'sim'],
-        desatualizado: ['tem mas está desatualizado', 'faz tempo que não atualizo'],
+        atualizado: ['sim, atualizado', 'tem sim, fiz esse ano', 'sim', 'atualizei ano passado'],
+        desatualizado: ['tem mas está desatualizado', 'faz tempo que não atualizo', 'fiz faz uns 3 anos'],
         nao: ['não tem', 'o que é isso?', 'nunca fiz'],
       }[v.cadunico]
+    case 'casa':
     case 'casa_renda':
+      if (v.pessoas === 1) return proprio ? ['moro sozinho', 'só eu'] : [`${e} mora sozinha`.replace('ele mora sozinha', 'ele mora sozinho')]
       return [
-        `somos ${v.pessoas} e a renda é ${v.renda} reais`,
-        `${v.pessoas} pessoas, uns ${v.renda} por mês`,
-        `moram ${v.pessoas}, a renda é R$ ${v.renda}`,
-        `a renda é ${v.renda} reais e somos ${v.pessoas}`,
-      ].map((x) => (v.renda === 0 ? x.replace(/(uns |R\$ )?0( reais| por mês)?/, 'ninguém trabalha, renda zero') : x))
+        `somos ${v.pessoas}`,
+        `${v.pessoas} pessoas`,
+        `moram ${v.pessoas} contando ${proprio ? 'comigo' : e}`,
+        ...(v.pessoas === 2 && !proprio ? [`só eu e ${e}`] : []),
+        ...(v.pessoas === 3 && (v.para === 'filho' || v.para === 'filha') ? [`eu, o pai e ${e}`] : []),
+      ]
     case 'pessoas':
       return [`${v.pessoas}`, `${v.pessoas} pessoas`, `somos ${v.pessoas}`]
     case 'renda':
-      return v.renda === 0 ? ['ninguém trabalha', 'renda zero'] : [`${v.renda} reais`, `R$ ${v.renda}`, `uns ${v.renda} por mês`]
+    case 'renda_simples':
+      return v.renda === 0 ? ['ninguém trabalha', 'renda zero', 'nada'] : [`${v.renda} reais`, `R$ ${v.renda}`, `uns ${v.renda} por mês`]
+    case 'beneficio_proprio':
+      return v.recebe === 'pensao'
+        ? [proprio ? 'sim, recebo pensão' : `sim, ${e} recebe pensão por morte`, proprio ? 'ganho pensão' : `${e} ganha pensão`]
+        : ['não', 'não recebe nada', 'nenhum']
+    case 'quem_recebe':
+      return v.recebe === 'pensao' ? [proprio ? 'eu mesmo' : `${e} mesmo`] : ['outra pessoa']
     case 'outros_beneficios':
       return {
         nao: ['não', 'ninguém recebe'],
-        aposentadoria: ['minha mãe recebe aposentadoria', 'sim, aposentadoria do meu pai'],
-        bpc: ['o irmão dele recebe o loas', 'sim, BPC'],
-        bolsa: ['só bolsa família', 'bolsa familia'],
+        aposentadoria: ['o avô é aposentado, um salário', 'sim, aposentadoria do avô'],
+        bpc: ['o irmão recebe o loas', 'sim, BPC do irmão'],
+        bolsa: ['só bolsa família', 'não, só o bolsa família'],
       }[v.outros]
+    case 'biometria':
+      return v.biometria ? ['tem CNH', 'tem título com digital', 'sim, tem a identidade nova'] : ['não tem', 'não sei', 'não']
     case 'pedido_anterior':
-      return { nao: ['nunca pedimos', 'não', 'primeira vez'], negado: ['já pedimos e negaram', 'foi indeferido'], em_analise: ['está em análise'] }[v.pedido]
+      return {
+        nao: ['nunca pedimos', 'não', 'primeira vez'],
+        negado: ['já pedimos e negaram', 'foi indeferido'],
+        negado_recente: ['já pedimos e negaram', 'foi indeferido'],
+        em_analise: ['está em análise'],
+      }[v.pedido]
+    case 'pedido_resultado':
+      return v.pedido === 'em_analise' ? ['ainda em análise'] : ['negaram']
     case 'tempo_negado':
-      return ['faz 6 meses', 'uns 2 anos']
+      return v.pedido === 'negado_recente' ? ['faz 10 dias', 'semana passada', 'faz uns 20 dias'] : ['faz 6 meses', 'uns 2 anos']
     case 'cadunico_combinado':
     case 'fase_medica_recusou':
     case 'retomar':
@@ -139,7 +175,7 @@ export function respostas(p: Pergunta, v: Verdade): string[] {
     case 'cidade':
       return ['sim', 'dá sim', 'ok']
     case 'horario':
-      return ['pode ser amanhã às 9h', 'hoje à tarde', '10h', 'pode ser']
+      return ['pode ser amanhã às 9h', 'hoje à tarde', '10h', 'pode ser de manhã']
     case 'contrato_ok':
       return ['pode', 'sim', 'ok']
     default:

@@ -10,9 +10,12 @@ Cuidado): React + Vite + Tailwind; Supabase com RLS forçada e Edge Functions.
   Roda igual no simulador da tela, nos testes (Node) e no webhook (Deno). Mudou o
   roteiro, roda `npm test` e lê as conversas: teste que passa não garante texto bom.
 - **Prove que o teste pega o defeito**: desligue a correção e veja o teste falhar.
-- O roteiro é do Lucas (v2.5, 08/10/2026). Nunca: dizer que a pessoa "tem
-  direito", pedir documento, oferecer parcelamento sem pedido, falar preço fora
-  da tabela. Uma pergunta por mensagem.
+- O roteiro é do Lucas (v3.2, 21/10/2026, resposta ao Raio-X, com a área do
+  idoso). Nunca: dizer que a pessoa "tem direito", pedir documento, oferecer
+  parcelamento sem pedido, falar preço fora da tabela. Uma pergunta por mensagem.
+  "Se qualifica sim" só no fechamento limpo, sem impedimento.
+- `npm test` roda os testes do robô, o do contrato e as 35 conversas montadas
+  (`tests/painel/suspeitas.ts --teste`): nenhuma pode voltar.
 - Contrato com valor fixo de R$ 1.000 só sem laudo, e nunca ligado a laudo,
   médico ou repasse no texto (`src/lib/contrato.ts`, testado em `tests/`).
 - **Migration aplicada nunca se edita**; correção vem em arquivo novo. A

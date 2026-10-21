@@ -29,6 +29,11 @@ export function ChipOrigem({ origem }: { origem: string }) {
   return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">{ORIGENS[origem] ?? origem}</span>
 }
 
+/** Publico da campanha: Autista ou Idoso (Lucas, 21/10/2026). */
+export function ChipPublico({ publico }: { publico: string }) {
+  return <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${publico === 'Idoso' ? 'bg-violet-100 text-violet-800' : 'bg-sky-100 text-sky-800'}`}>{publico}</span>
+}
+
 export function Vazio({ icone, titulo, texto }: { icone: ReactNode; titulo: string; texto?: string }) {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-14 text-center">

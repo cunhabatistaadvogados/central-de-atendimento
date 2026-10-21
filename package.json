@@ -7,9 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "node tests/robo.test.ts && node tests/contrato.test.ts",
+    "test": "node tests/robo.test.ts && node tests/contrato.test.ts && node tests/painel/suspeitas.ts --teste > tmp/suspeitas.txt",
     "painel:fuzz": "node tests/painel/fuzz.ts",
     "painel:suspeitas": "node tests/painel/suspeitas.ts",
+    "painel:exportar": "node tests/painel/exportar.ts relatorios/conversas-antes-e-depois",
     "painel:mutacao": "stryker run"
   },
   "dependencies": {

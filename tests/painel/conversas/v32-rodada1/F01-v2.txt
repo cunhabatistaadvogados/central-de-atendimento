@@ -1,0 +1,45 @@
+FAMÍLIA: oii
+ROBÔ: Oi! Aqui é a Mary, do atendimento automático do escritório Cunha, Batista & Advogados (OAB/SP 9.894). Se preferir falar com uma pessoa, é só pedir. Me conta seu nome e para quem seria o benefício?
+  [sinal] {"tipo":"etapa","etapa":"qualificacao"}
+FAMÍLIA: meu irmao e autista tem 30 anos, com a renda dos meus pais ele consegue o loas?
+ROBÔ: Essa resposta depende do caso, e quem avalia é o advogado. Já anotei sua pergunta para ele. E qual o seu nome?
+  [sinal] {"tipo":"origem","campanha":"autista"}
+  [sinal] {"tipo":"duvida","texto":"meu irmao e autista tem 30 anos, com a renda dos meus pais ele consegue o loas?"}
+FAMÍLIA: camila
+ROBÔ: Prazer, Camila. Antes de seguir: o que você contar sobre saúde fica só com a equipe do escritório, para analisar o seu caso. Ele tem laudo do médico com o diagnóstico, e de que ano é?
+FAMÍLIA: tem 2024
+ROBÔ: Como é a rotina dele: precisa de ajuda nas coisas do dia, faz terapia ou toma remédio?
+FAMÍLIA: ele n trabalha, precisa de ajuda pra qse tudo
+ROBÔ: Entendo. O acompanhamento é pelo SUS ou por plano/particular?
+FAMÍLIA: toma remedio
+ROBÔ: A família tem o CadÚnico, o cadastro do CRAS, atualizado nos últimos 2 anos?
+FAMÍLIA: sim ta atualizado
+ROBÔ: Ótimo. Quem mora com ele na mesma casa?
+FAMÍLIA: ele mora c minha mae e meu pai, eu nao moro la
+ROBÔ: E quanto entra de dinheiro na casa por mês, somando todo mundo, mais ou menos?
+FAMÍLIA: mae bpc idosa e pai aposentado, os dois 1 salario minimo
+ROBÔ: Entendi. Ele já recebe algum benefício do INSS, como pensão ou aposentadoria?
+FAMÍLIA: n ele nao recebe nada
+ROBÔ: Alguém da casa recebe aposentadoria, pensão ou BPC, e de quanto, mais ou menos?
+FAMÍLIA: ja falei kkk minha mae o bpc e meu pai aposentadoria, 1621 cada
+ROBÔ: Vocês já pediram o BPC no INSS alguma vez?
+FAMÍLIA: nunca, a gnt achava q nao dava pela renda
+ROBÔ: Camila, pelo que você me contou, seu caso se qualifica sim para o atendimento com o nosso advogado de BPC, o Dr. André. Vamos marcar: hoje à tarde ou amanhã de manhã é melhor para você?
+  [sinal] {"tipo":"encaminhar","motivo":"Qualificação completa"}
+  [sinal] {"tipo":"etapa","etapa":"qualificado"}
+FAMÍLIA: mas entao da ou nao da?
+ROBÔ: Tudo bem. Qual dia e horário ficam melhores para você?
+FAMÍLIA: eu perguntei se ele consegue receber
+ROBÔ: Só para confirmar: prefere hoje à tarde ou amanhã de manhã?
+FAMÍLIA: amanha 10h
+ROBÔ: Combinado, amanhã às 10h. Para não perder tempo, a equipe já te manda o contrato e a lista de documentos antes da conversa. Pode ser?
+  [sinal] {"tipo":"reuniao","quando":"amanhã às 10h"}
+  [sinal] {"tipo":"etapa","etapa":"reuniao"}
+FAMÍLIA: pode mandar
+ROBÔ: Perfeito, Camila. A equipe já te chama por aqui com o contrato e a lista de documentos.
+  [sinal] {"tipo":"encaminhar","motivo":"Reunião amanhã às 10h: enviar contrato e lista de documentos"}
+
+ESTADO
+  pausado: true (Reunião marcada: equipe envia contrato e documentos)
+  próxima pergunta do robô: (nenhuma)
+  ficha: {"para":"familiar","quem":"seu irmão","pronome":"ele","campanha":"autista","idade":30,"diagnostico":"Autismo (TEA)","duvidas":["meu irmao e autista tem 30 anos, com a renda dos meus pais ele consegue o loas?"],"nome":"Camila","laudo":"tem","laudoAno":2024,"rotina":"ele n trabalha, precisa de ajuda pra qse tudo","tratamento":"outro","tratamentoTexto":"toma remedio","cadunico":"atualizado","pessoasCasa":4,"casaTexto":"ele mora c minha mae e meu pai, eu nao moro la","area":"idoso","rendaCasa":1621,"rendaTexto":"mae bpc idosa e pai aposentado, os dois 1 salario minimo","beneficioProprio":"nao","outrosBeneficios":"sim","outrosBeneficiosTexto":"ja falei kkk minha mae o bpc e meu pai aposentadoria, 1621 cada","anotacoes":["A renda inclui aposentadoria ou BPC de até 1 salário mínimo de outra pessoa da casa. Se essa pessoa for idosa (65+) ou com deficiência, pela LOAS (art. 20, §14) esse valor não entra na conta do INSS. Conferir."],"pedidoAnterior":"nao","horario":"amanhã às 10h"}

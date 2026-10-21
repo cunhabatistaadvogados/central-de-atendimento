@@ -15,7 +15,8 @@ const ATALHOS: { nome: string; falas: string[] }[] = [
   { nome: 'Anúncio: autismo com laudo', falas: ['Oi, meu filho tem laudo de autismo e quero saber sobre o BPC/LOAS'] },
   { nome: 'Veio pelo site', falas: ['Gostaria de falar com um advogado previdenciário'] },
   { nome: 'Sem laudo', falas: ['minha filha tem autismo mas ainda não tem laudo'] },
-  { nome: 'Idoso', falas: ['oi, é pra mim, tenho 68 anos'] },
+  { nome: 'Idoso', falas: ['Oi, quero saber do LOAS do idoso para minha mãe'] },
+  { nome: '60 a 64 anos', falas: ['oi, é pra mim, tenho 63 anos'] },
   { nome: 'Pergunta o preço', falas: ['quanto custa pra entrar com o bpc do meu filho?'] },
   { nome: 'Desconfiado', falas: ['isso é golpe?'] },
 ]
@@ -26,6 +27,10 @@ function rotuloSinal(s: Sinal): string {
   if (s.tipo === 'etapa') return `Etapa: ${etapa(s.etapa).nome}`
   if (s.tipo === 'encaminhar') return `Passou para a equipe: ${s.motivo}`
   if (s.tipo === 'pendencia') return `Retorno em ${s.dias} dia(s): ${s.texto}`
+  if (s.tipo === 'pendencia_resolvida') return `Pendência resolvida: ${s.texto}`
+  if (s.tipo === 'duvida') return `Dúvida para o advogado: ${s.texto}`
+  if (s.tipo === 'encerrar') return `Encerrado: ${s.motivo}`
+  if (s.tipo === 'origem') return `Origem: ${[s.origem, s.campanha].filter(Boolean).join(' · ')}`
   return `Reunião pedida: ${s.quando}`
 }
 
@@ -73,8 +78,9 @@ export default function Simulador() {
     ['Nome', f.nome],
     ['Para quem', f.para && (f.para === 'proprio' ? 'próprio(a)' : f.para === 'familiar' ? f.quem : f.para)],
     ['Idade', f.idade !== undefined ? `${f.idade} anos` : undefined],
-    ['Diagnóstico', f.diagnostico],
-    ['Laudo', f.laudo],
+    ['Área', f.area === 'idoso' ? 'BPC/LOAS Idoso' : undefined],
+    ['Diagnóstico', f.semDeficiencia ? 'sem doença ou deficiência' : f.diagnostico],
+    ['Laudo', f.laudo && `${f.laudo}${f.laudoAno ? ` (${f.laudoAno})` : ''}`],
     ['Fase médica', f.faseMedica],
     ['Rotina', f.rotina],
     ['Tratamento', f.tratamentoTexto],
@@ -82,9 +88,14 @@ export default function Simulador() {
     ['Pessoas na casa', f.pessoasCasa?.toString()],
     ['Renda da casa', f.rendaCasa !== undefined ? dinheiro(f.rendaCasa) : undefined],
     ['Renda por pessoa', rpp !== undefined ? dinheiro(rpp) : undefined],
+    ['Já recebe benefício', f.beneficioProprio],
     ['Outros benefícios', f.outrosBeneficios],
-    ['Pedido anterior', f.pedidoAnterior],
+    ['Biometria', f.biometria],
+    ['Pedido anterior', f.pedidoAnterior && `${f.pedidoAnterior}${f.tempoNegado ? `, ${f.tempoNegado}` : ''}`],
     ['Horário', f.horario],
+    ['Origem', [f.origem, f.campanha].filter(Boolean).join(' · ') || undefined],
+    ['Dúvidas', f.duvidas?.join(' | ')],
+    ['Anotações', f.anotacoes?.join(' | ')],
   ]
 
   return (
@@ -195,7 +206,7 @@ export default function Simulador() {
                 <FileSignature className="h-5 w-5 text-ouro-400" />
                 {f.laudo || f.idade !== undefined ? (contratoComParteFixa(f) ? 'Com valor fixo (R$ 1.000)' : 'Padrão') : 'Ainda não dá para saber'}
               </p>
-              <p className="mt-1 text-xs text-white/50">Definido pelo laudo: sem laudo recente vai pela fase médica parceira e leva o valor fixo.</p>
+              <p className="mt-1 text-xs text-white/50">Definido pelo laudo: sem laudo, pela fase médica parceira, leva o valor fixo. Laudo de qualquer ano e idoso: versão padrão.</p>
             </div>
             <div className="cartao p-5">
               <p className="rotulo text-ouro-600">Sinais para o sistema</p>

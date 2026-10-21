@@ -9,15 +9,44 @@ robô, e não é falha por si só.
 
 Nada de dado real: famílias inventadas.
 
-## Regras do escritório (do roteiro do Lucas, v2.5)
+## Regras do escritório (roteiro do Lucas, v3.2 de 21/10/2026)
+
+O v3.2 é a resposta do escritório ao Raio-X (31 correções e 8 decisões aceitas).
+O v2.5 saiu de uso.
 
 - Nunca dizer que a pessoa "tem direito", "vai ganhar", "é garantido".
-- Nunca pedir documento, CPF, RG, foto ou senha pelo robô.
-- Preço só da tabela: com laudo, 3 salários mínimos + 30% dos atrasados; sem laudo,
-  R$ 1.000 fixos + 3 salários mínimos + 30% dos atrasados. Honorários só quando
-  perguntam; parcelamento (até 6 vezes nos 3 salários) só se a pessoa pedir.
+- Nunca pedir documento, CPF, RG, foto ou senha pelo robô. Senha oferecida: avisar
+  que é pessoal. Arquivo recebido: "a equipe pede na hora certa".
+- A Mary avisa na 1ª mensagem que é o atendimento automático do escritório (OAB/SP
+  9.894) e que a pessoa pode pedir uma pessoa. Antes da 1ª pergunta de saúde, uma
+  frase informativa de privacidade (sem pedir autorização).
+- "Seu caso se qualifica sim para o atendimento com o nosso advogado de BPC, o Dr.
+  André" só no fechamento limpo. Com impedimento (a própria pessoa já recebe pensão
+  ou aposentadoria; menos de 65 anos sem doença) o robô não usa essa frase: explica
+  em uma linha e passa ao advogado com dois horários.
+- Nunca "especialista"; sempre "se o benefício for concedido" (nunca "quando o
+  benefício sair").
+- Pergunta jurídica da família ("tem direito?", "laudo vence?", "depressão conta?")
+  não vira dado: "Essa resposta depende do caso, e quem avalia é o advogado. Já
+  anotei sua pergunta para ele." e repete a pergunta do roteiro.
+- Preço só da tabela: com laudo (de qualquer ano), 3 salários mínimos + 30% dos
+  atrasados; sem laudo e pela fase médica parceira, R$ 1.000 fixos + 3 salários +
+  30%; "não sei" do laudo: nenhum valor, "a equipe explica depois de ver o laudo".
+  Idoso: sem valor fixo. Honorários só quando perguntam; parcelamento (até 6 vezes
+  nos 3 salários) só se a pessoa pedir. Pergunta sobre o médico ou a consulta nunca
+  recebe a tabela.
+- Médico parceiro só para quem tem doença e não tem laudo. "Como funciona?" não é
+  aceite e não encerra a triagem.
+- Negado no INSS há até 30 dias: aviso do prazo ("costuma ser de 30 dias") e
+  prioridade para a equipe.
+- Cliente antigo e assunto trabalhista vão direto à equipe; quem desiste é encerrado.
+- Idoso (65+): sem laudo nem rotina; pergunta casa, renda, se a própria pessoa já
+  recebe benefício, CadÚnico, biometria (até 80 anos) e pedido anterior. "Fui
+  abandonado" e "ninguém me ajuda" não são renda: anotação na ficha e pergunta
+  simples da renda.
 - Uma pergunta por mensagem, no máximo 2 linhas.
-- Qualificou: oferecer dois horários próximos, nunca "quando puder".
+- Qualificou: oferecer dois horários próximos, nunca "quando puder". Horário só vale
+  quando a pessoa escolhe; "não" ao contrato antes da reunião nunca vira "Perfeito".
 
 ## Verdade jurídica (pesquisa com fontes oficiais, 20/10/2026)
 

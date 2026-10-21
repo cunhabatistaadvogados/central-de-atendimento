@@ -1,0 +1,49 @@
+FAMÍLIA: oi
+ROBÔ: Oi! Aqui é a Mary, do atendimento automático do escritório Cunha, Batista & Advogados (OAB/SP 9.894). Se preferir falar com uma pessoa, é só pedir. Me conta seu nome e para quem seria o benefício?
+  [sinal] {"tipo":"etapa","etapa":"qualificacao"}
+FAMÍLIA: o laudo do meu filho e de 2017 laudo vence?
+ROBÔ: Essa resposta depende do caso, e quem avalia é o advogado. Já anotei sua pergunta para ele. Me conta seu nome e quantos anos tem seu filho?
+  [sinal] {"tipo":"duvida","texto":"o laudo do meu filho e de 2017 laudo vence?"}
+FAMÍLIA: simone
+ROBÔ: Prazer, Simone. Quantos anos tem seu filho?
+FAMÍLIA: 19
+ROBÔ: Antes de seguir: o que você contar sobre saúde fica só com a equipe do escritório, para analisar o seu caso. Qual o diagnóstico dele, e desde quando?
+FAMÍLIA: [audio recebido]
+ROBÔ: Recebi seu áudio, mas não consegui ouvir direito. Me conta por escrito?
+FAMÍLIA: autismo desde pequeno
+ROBÔ: Entendo. Como é a rotina dele: precisa de ajuda nas coisas do dia, faz terapia ou toma remédio?
+  [sinal] {"tipo":"origem","campanha":"autista"}
+FAMÍLIA: ja pedimos no inss e negaram
+ROBÔ: Entendo. Faz quanto tempo que negaram?
+FAMÍLIA: uns 8 mes
+ROBÔ: Acontece muito e não encerra o assunto. O advogado vê se cabe novo pedido ou ação. O acompanhamento é pelo SUS ou por plano/particular?
+FAMÍLIA: sus
+ROBÔ: A família tem o CadÚnico, o cadastro do CRAS, atualizado nos últimos 2 anos?
+FAMÍLIA: tem ta atualizado
+ROBÔ: Ótimo. Quem mora com ele na mesma casa? (pai, mãe, irmãos...)
+FAMÍLIA: eu e ele
+ROBÔ: E quanto entra de dinheiro na casa por mês, somando todo mundo, mais ou menos?
+FAMÍLIA: ele e jovem aprendiz ganha 900
+ROBÔ: Entendi. Ele já recebe algum benefício do INSS, como pensão ou aposentadoria?
+FAMÍLIA: eu faço faxina uns 700
+ROBÔ: Desculpa, não entendi direito. Pode me explicar com outras palavras?
+FAMÍLIA: eu ganho 700 por mes de faxina, e ele n recebe beneficio nenhum
+ROBÔ: Alguém da casa recebe aposentadoria, pensão ou BPC, e de quanto, mais ou menos?
+FAMÍLIA: nao
+ROBÔ: Simone, pelo que você me contou, seu caso se qualifica sim para o atendimento com o nosso advogado de BPC, o Dr. André. Vamos marcar: hoje à tarde ou amanhã de manhã é melhor para você?
+  [sinal] {"tipo":"encaminhar","motivo":"Qualificação completa"}
+  [sinal] {"tipo":"etapa","etapa":"qualificado"}
+FAMÍLIA: mas o laudo de 2017 serve ou tem q fazer outro
+ROBÔ: Só para confirmar: prefere hoje à tarde ou amanhã de manhã?
+FAMÍLIA: amanha cedo
+ROBÔ: Combinado, amanhã de manhã. Para não perder tempo, a equipe já te manda o contrato e a lista de documentos antes da conversa. Pode ser?
+  [sinal] {"tipo":"reuniao","quando":"amanhã de manhã"}
+  [sinal] {"tipo":"etapa","etapa":"reuniao"}
+FAMÍLIA: pode
+ROBÔ: Perfeito, Simone. A equipe já te chama por aqui com o contrato e a lista de documentos.
+  [sinal] {"tipo":"encaminhar","motivo":"Reunião amanhã de manhã: enviar contrato e lista de documentos"}
+
+ESTADO
+  pausado: true (Reunião marcada: equipe envia contrato e documentos)
+  próxima pergunta do robô: (nenhuma)
+  ficha: {"para":"filho","pronome":"ele","laudo":"tem","laudoAno":2017,"duvidas":["o laudo do meu filho e de 2017 laudo vence?"],"nome":"Simone","idade":19,"campanha":"autista","diagnostico":"Autismo (TEA)","rotina":"ja pedimos no inss e negaram","pedidoAnterior":"negado","diasNegado":240,"tempoNegado":"uns 8 mes","tratamento":"SUS","tratamentoTexto":"SUS","cadunico":"atualizado","pessoasCasa":2,"casaTexto":"eu e ele","rendaCasa":900,"rendaTexto":"ele e jovem aprendiz ganha 900","beneficioProprio":"nao","outrosBeneficios":"nao","horario":"amanhã de manhã"}

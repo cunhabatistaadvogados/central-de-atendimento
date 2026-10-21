@@ -2,7 +2,16 @@ import type { EstadoRobo, Etapa } from '@motor/robo'
 
 export type { Etapa }
 
-export type Origem = 'anuncio' | 'site' | 'instagram' | 'indicacao'
+/** 'meta' e 'google' desde 21/10/2026 (etiquetas pedidas pelo Lucas); 'anuncio' = sem saber a plataforma. */
+export type Origem = 'anuncio' | 'meta' | 'google' | 'site' | 'instagram' | 'indicacao'
+
+/** Anuncio de clique para WhatsApp do Meta (referral da 1a mensagem). */
+export interface Anuncio {
+  titulo?: string | null
+  texto?: string | null
+  link?: string | null
+  id?: string | null
+}
 
 export interface Mensagem {
   id: string
@@ -83,6 +92,7 @@ export interface Cliente {
   nome: string
   telefone: string
   origem: Origem
+  anuncio?: Anuncio
   criadoEm: string
   atualizadoEm: string
   etapa: Etapa

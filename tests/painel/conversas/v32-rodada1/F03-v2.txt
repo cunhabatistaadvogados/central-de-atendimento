@@ -1,0 +1,21 @@
+FAMÍLIA: oi
+ROBÔ: Oi! Aqui é a Mary, do atendimento automático do escritório Cunha, Batista & Advogados (OAB/SP 9.894). Se preferir falar com uma pessoa, é só pedir. Me conta seu nome e para quem seria o benefício?
+  [sinal] {"tipo":"etapa","etapa":"qualificacao"}
+FAMÍLIA: meu filho tem autismo, 5 anos. se eu pedir o loas vou perder o bolsa familia?
+ROBÔ: Não precisa cancelar nada. O advogado confere o seu caso. E qual o seu nome?
+  [sinal] {"tipo":"origem","campanha":"autista"}
+FAMÍLIA: juliana
+ROBÔ: Prazer, Juliana. Antes de seguir: o que você contar sobre saúde fica só com a equipe do escritório, para analisar o seu caso. Ele tem laudo do médico com o diagnóstico, e de que ano é?
+FAMÍLIA: tem laudo sim de 2026
+ROBÔ: Como é a rotina dele: precisa de ajuda nas coisas do dia, faz terapia ou toma remédio?
+FAMÍLIA: faz fono 1x na semana, nao fala direito, precisa de ajuda pra tudo
+ROBÔ: Entendo. O acompanhamento é pelo SUS ou por plano/particular?
+FAMÍLIA: e qto vcs cobram?
+ROBÔ: São 3 salários mínimos e 30% dos atrasados. Você só paga no final, se o benefício for concedido. Posso pedir para a equipe te chamar e explicar os detalhes?
+  [sinal] {"tipo":"encaminhar","motivo":"Perguntou preço"}
+  [sinal] {"tipo":"etapa","etapa":"qualificado"}
+
+ESTADO
+  pausado: true (Perguntou preço)
+  próxima pergunta do robô: (nenhuma)
+  ficha: {"para":"filho","pronome":"ele","campanha":"autista","idade":5,"diagnostico":"Autismo (TEA)","nome":"Juliana","laudo":"tem","laudoAno":2026,"rotina":"faz fono 1x na semana, nao fala direito, precisa de ajuda pra tudo"}

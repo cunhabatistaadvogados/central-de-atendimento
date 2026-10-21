@@ -1,0 +1,17 @@
+FAMÍLIA: oi bom dia
+ROBÔ: Oi! Aqui é a Mary, do atendimento automático do escritório Cunha, Batista & Advogados (OAB/SP 9.894). Se preferir falar com uma pessoa, é só pedir. Me conta seu nome e para quem seria o benefício?
+  [sinal] {"tipo":"etapa","etapa":"qualificacao"}
+FAMÍLIA: queria saber do loas pro meu filho que é autista
+ROBÔ: Prazer, Queria. Quantos anos tem seu filho?
+  [sinal] {"tipo":"origem","campanha":"autista"}
+FAMÍLIA: quanto custa?
+ROBÔ: Ele já tem laudo do médico?
+FAMÍLIA: tem sim, saiu esse ano
+ROBÔ: São 3 salários mínimos e 30% dos atrasados. Você só paga no final, se o benefício for concedido. Posso pedir para a equipe te chamar e explicar os detalhes?
+  [sinal] {"tipo":"encaminhar","motivo":"Perguntou preço"}
+  [sinal] {"tipo":"etapa","etapa":"qualificado"}
+
+ESTADO
+  pausado: true (Perguntou preço)
+  próxima pergunta do robô: (nenhuma)
+  ficha: {"nome":"Queria","para":"filho","pronome":"ele","campanha":"autista","diagnostico":"Autismo (TEA)","laudo":"tem"}

@@ -1,8 +1,9 @@
 import type { Etapa } from '@motor/robo'
-import { dinheiro, ehIdoso, rendaPorPessoa, SALARIO_MINIMO } from '@motor/robo'
+import { dinheiro, ehIdoso, rendaPorPessoa, SALARIO_MINIMO, temLaudo } from '@motor/robo'
 import { AlarmClock, Bot, CalendarCheck2, Check, CheckCircle2, Circle, FileSignature, MessagesSquare, Smartphone, X } from 'lucide-react'
 import { useState } from 'react'
-import { Avatar, ChipEtapa, ChipOrigem, PainelLateral } from '@/components/ui'
+import { Avatar, ChipEtapa, ChipOrigem, ChipPublico, PainelLateral } from '@/components/ui'
+import { publicos, textoDoLaudo } from '@/lib/atendimento'
 import { ETAPAS } from '@/lib/escritorio'
 import { dataHora, haQuanto } from '@/lib/formato'
 import { formatarTelefone, numeroDoWhatsApp } from '@/lib/repositorio'
@@ -66,23 +67,54 @@ function Resumo({ c, autor }: { c: Cliente; autor: string }) {
         <p className="rotulo mb-2 px-1 text-ouro-600">O que a família contou ao robô</p>
         <div className="grid gap-2 rounded-[22px] bg-ouro-50/60 p-2 sm:grid-cols-2 lg:grid-cols-3">
           <Linha rotulo="Benefício para" valor={para && `${para}${f.idade !== undefined ? `, ${f.idade} anos` : ''}`} />
-          <Linha rotulo="Diagnóstico" valor={ehIdoso(f) ? 'Idoso 65+ (sem laudo)' : f.diagnostico} />
-          <Linha rotulo="Laudo" valor={f.laudo === 'recente' ? 'Tem, recente' : f.laudo === 'antigo' ? 'Antigo (mais de 1 ano)' : f.laudo === 'sem' ? 'Não tem' : undefined} alerta={f.laudo !== 'recente'} />
-          <Linha rotulo="Fase médica parceira" valor={f.faseMedica === 'aceitou' ? 'Aceitou' : f.faseMedica === 'recusou' ? 'Recusou por agora' : undefined} />
+          <Linha rotulo="Diagnóstico" valor={ehIdoso(f) ? 'Idoso 65+ (sem laudo)' : f.semDeficiencia ? 'Sem doença ou deficiência' : f.diagnostico} alerta={f.semDeficiencia && !ehIdoso(f)} />
+          <Linha rotulo="Laudo" valor={textoDoLaudo(f)} alerta={!temLaudo(f)} />
+          <Linha
+            rotulo="Fase médica parceira"
+            valor={f.faseMedica === 'aceitou' ? 'Aceitou' : f.faseMedica === 'recusou' ? 'Recusou por agora' : f.faseMedica === 'explicada' ? 'Quis saber como funciona' : undefined}
+          />
           <Linha rotulo="Rotina" valor={f.rotina} />
           <Linha rotulo="Tratamento" valor={f.tratamentoTexto} />
           <Linha rotulo="CadÚnico" valor={f.cadunico === 'atualizado' ? 'Atualizado' : f.cadunico === 'desatualizado' ? 'Precisa atualizar' : f.cadunico === 'nao' ? 'Não tem' : undefined} alerta={f.cadunico !== 'atualizado'} />
-          <Linha rotulo="Casa" valor={f.pessoasCasa !== undefined ? `${f.pessoasCasa} pessoa(s)` : undefined} />
+          <Linha rotulo="Casa" valor={f.pessoasCasa !== undefined ? `${f.pessoasCasa} pessoa(s)${f.casaTexto ? `: ${f.casaTexto}` : ''}` : f.casaTexto} />
           <Linha
-            rotulo="Renda por pessoa"
+            rotulo="Renda por pessoa (estimativa)"
             valor={rpp !== undefined ? `${dinheiro(rpp)} (${Math.round((rpp / SALARIO_MINIMO) * 100)}% do mínimo)` : f.rendaCasa !== undefined ? `Casa: ${dinheiro(f.rendaCasa)}` : undefined}
             alerta={rpp !== undefined && rpp > SALARIO_MINIMO / 4}
           />
+          <Linha rotulo="Renda, como contou" valor={f.rendaTexto} />
+          <Linha
+            rotulo="Já recebe benefício (a própria pessoa)"
+            valor={f.beneficioProprio === 'sim' ? `Sim${f.beneficioProprioTexto ? ` (${f.beneficioProprioTexto})` : ''}: o advogado olha antes` : f.beneficioProprio === 'nao' ? 'Não' : undefined}
+            alerta={f.beneficioProprio === 'sim'}
+          />
           <Linha rotulo="Outros benefícios na casa" valor={f.outrosBeneficios === 'sim' ? `Sim${f.outrosBeneficiosTexto ? ` (${f.outrosBeneficiosTexto})` : ''}` : f.outrosBeneficios === 'nao' ? 'Não' : undefined} />
-          <Linha rotulo="Pedido anterior no INSS" valor={f.pedidoAnterior === 'negado' ? `Negado${f.tempoNegado ? `, ${f.tempoNegado}` : ''}` : f.pedidoAnterior === 'em_analise' ? 'Em análise' : f.pedidoAnterior === 'nao' ? 'Nunca pediu' : undefined} />
+          {ehIdoso(f) && <Linha rotulo="Biometria (CNH, CIN ou título)" valor={f.biometria === 'sim' ? 'Tem' : f.biometria === 'nao' ? 'Não tem: equipe orienta' : undefined} alerta={f.biometria === 'nao'} />}
+          <Linha
+            rotulo="Pedido anterior no INSS"
+            valor={f.pedidoAnterior === 'negado' ? `Negado${f.tempoNegado ? `, ${f.tempoNegado}` : ''}` : f.pedidoAnterior === 'em_analise' ? 'Em análise' : f.pedidoAnterior === 'nao' ? 'Nunca pediu' : f.pedidoAnterior === 'sim' ? 'Já pediu' : undefined}
+            alerta={f.diasNegado !== undefined && f.diasNegado <= 30}
+          />
           <Linha rotulo="Cidade" valor={f.cidade ?? c.cidade} />
         </div>
-        <p className="mt-2 px-1 text-[11px] text-slate-400">Regra geral: até 1/4 do salário mínimo por pessoa. Acima disso há exceções que só o advogado avalia; o robô nunca dá veredito.</p>
+        <p className="mt-2 px-1 text-[11px] text-slate-400">
+          A renda por pessoa é só a soma do que a família contou: quem entra na conta (LOAS, art. 20, §1º e §14) o advogado confere. Regra geral: até 1/4 do salário mínimo
+          por pessoa; acima disso há exceções que só o advogado avalia. O robô nunca dá veredito.
+        </p>
+        {(f.duvidas?.length || f.anotacoes?.length) && (
+          <div className="mt-3 space-y-2">
+            {(f.duvidas ?? []).map((d, i) => (
+              <p key={`d${i}`} className="rounded-2xl bg-sky-50 px-3.5 py-2.5 text-xs text-sky-900">
+                <span className="font-extrabold">Dúvida para o advogado:</span> "{d}"
+              </p>
+            ))}
+            {(f.anotacoes ?? []).map((a, i) => (
+              <p key={`a${i}`} className="rounded-2xl bg-orange-50 px-3.5 py-2.5 text-xs text-orange-900">
+                <span className="font-extrabold">Anotação do robô:</span> {a}
+              </p>
+            ))}
+          </div>
+        )}
       </section>
 
       <div className="grid gap-5 lg:grid-cols-2">
@@ -93,7 +125,7 @@ function Resumo({ c, autor }: { c: Cliente; autor: string }) {
               <label key={k} className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 hover:bg-ouro-50/60">
                 <input type="checkbox" checked={c.documentos[k]} onChange={(e) => documentos(c.id, { ...c.documentos, [k]: e.target.checked })} className="h-4 w-4 accent-marinho-800" />
                 <span className={`text-sm ${c.documentos[k] ? 'font-bold text-marinho-900' : 'text-slate-500'}`}>{nome}</span>
-                {k === 'laudo' && f.laudo !== 'recente' && <span className="ml-auto text-[10px] font-bold text-orange-600">fase médica</span>}
+                {k === 'laudo' && f.laudo === 'sem' && f.faseMedica !== 'recusou' && <span className="ml-auto text-[10px] font-bold text-orange-600">fase médica</span>}
               </label>
             ))}
           </div>
@@ -197,9 +229,17 @@ export default function FichaDoCliente({ id, abaInicial, onFechar, abrirConversa
               className="titulo-serif w-full rounded-lg bg-transparent text-[28px] leading-tight text-white outline-none placeholder:text-white/30 focus:bg-white/5"
             />
             <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-white/55">
-              <Smartphone className="h-3.5 w-3.5" /> {c.telefone || <SemWhatsApp gravar={(telefone) => atualizarCliente(c.id, { telefone })} />} <ChipOrigem origem={c.origem} /> · chegou{' '}
-              {haQuanto(c.criadoEm)}
+              <Smartphone className="h-3.5 w-3.5" /> {c.telefone || <SemWhatsApp gravar={(telefone) => atualizarCliente(c.id, { telefone })} />} <ChipOrigem origem={c.origem} />
+              {publicos(c.robo.ficha).map((p) => (
+                <ChipPublico key={p} publico={p} />
+              ))}{' '}
+              · chegou {haQuanto(c.criadoEm)}
             </p>
+            {c.anuncio?.titulo && (
+              <p className="mt-1 truncate text-[11px] text-white/45" title={c.anuncio.texto ?? undefined}>
+                Anúncio: {c.anuncio.titulo}
+              </p>
+            )}
           </div>
           <button type="button" onClick={onFechar} aria-label="Fechar ficha" className="rounded-xl p-2 text-white/60 hover:bg-white/10">
             <X className="h-5 w-5" />

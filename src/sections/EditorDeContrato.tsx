@@ -94,7 +94,7 @@ export default function EditorDeContrato({ cliente }: { cliente: Cliente }) {
             <p className="rotulo text-ouro-600">Versão do contrato</p>
             <p className="titulo-serif text-xl">{contrato.comParteFixa ? 'Com valor fixo de R$ 1.000' : 'Padrão (3 salários + 30%)'}</p>
             <p className="mt-1 text-xs text-slate-500">
-              Escolhida pela conversa: {sugerida ? 'o cliente não tem laudo recente, vai pela fase médica parceira.' : 'o cliente já tem laudo (ou é idoso).'}
+              Escolhida pela conversa: {sugerida ? 'o cliente não tem laudo e vai pela fase médica parceira.' : 'o cliente já tem laudo (ou é idoso).'}
             </p>
           </div>
           <label className="flex items-center gap-2 text-xs font-bold text-marinho-800">

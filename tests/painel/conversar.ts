@@ -4,13 +4,19 @@
 //   node tests/painel/conversar.ts <conversa.json>
 //
 //   { "inicio": "2026-10-19T13:00:00Z", "mensagens": ["oi", "é pro meu filho", ...] }
+//   ROBO=<arquivo> node tests/painel/conversar.ts <conversa.json>   noutra versao do robo
 //
 // O robo e deterministico: a conversa inteira roda de novo a cada chamada, e a
 // familia so acrescenta a mensagem nova no fim da lista. Saida: cada turno,
 // os sinais para o sistema, as regras do escritorio quebradas e a ficha.
 import { readFileSync } from 'node:fs'
-import { novoEstado, responder, type EstadoRobo } from '../../supabase/functions/_shared/robo.ts'
+import { resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import type { EstadoRobo } from '../../supabase/functions/_shared/robo.ts'
 import { conferir } from './regras.ts'
+
+type Robo = typeof import('../../supabase/functions/_shared/robo.ts')
+const { novoEstado, responder } = (await import(process.env.ROBO ? pathToFileURL(resolve(process.env.ROBO)).href : '../../supabase/functions/_shared/robo.ts')) as Robo
 
 const arquivo = process.argv[2]
 if (!arquivo) {
