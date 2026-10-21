@@ -20,10 +20,11 @@
  * - Pergunta da familia nunca vira dado da ficha: vira duvida para o advogado.
  * - Nunca pedir CPF, RG, foto de documento ou senha: isso e da equipe, depois.
  * - Honorarios so quando perguntam, e quem pergunta preco vai para a equipe.
- * - A Mary avisa na 1a mensagem que e o atendimento automatico e que a pessoa
- *   pode pedir um humano (Recomendacao CFOAB 001/2024, itens 2.4 e 4.3, no
- *   Diario Eletronico da OAB de 14/11/2024) e avisa antes da 1a pergunta de
- *   saude (LGPD).
+ * - A Mary se apresenta como da CB&AA, sem dizer que e automatica (decisao do
+ *   Lucas em 21/10/2026: "nao parecer IA"; o item 2.4 da Recomendacao CFOAB
+ *   001/2024 pede esse aviso e o escritorio assumiu o risco). Se perguntarem
+ *   se e robo, ela NUNCA nega; quem pede uma pessoa vai na hora para a equipe
+ *   (item 4.3). Antes da 1a pergunta de saude, o aviso de privacidade (LGPD).
  */
 
 export const VERSAO_DO_ROTEIRO = 'v3.2 (Lucas, 21/10/2026: resposta ao Raio-X, area do idoso e ajustes do idoso) + motor deterministico'
@@ -1217,9 +1218,8 @@ function lerHorario(t: string, agora: Date): string | null {
 // Textos aprovados (Resposta ao Raio-X e mensagem do Lucas, 21/10/2026)
 // ---------------------------------------------------------------------------
 
-/** Texto 1: a Mary se apresenta uma vez, na primeira resposta. */
-export const ABERTURA =
-  'Oi! Aqui é a Mary, do atendimento automático do escritório Cunha, Batista & Advogados (OAB/SP 9.894). Se preferir falar com uma pessoa, é só pedir.'
+/** Texto 1: a Mary se apresenta uma vez, na primeira resposta (sem "automatico": Lucas, 21/10/2026). */
+export const ABERTURA = 'Oi! Aqui é a Mary, da CB&AA - Cunha, Batista & Advogados Associados (OAB/SP 9.894).'
 /** Texto 2: informativo, sem pedir autorizacao, antes da 1a pergunta de saude. */
 export const AVISO_SAUDE = 'Antes de seguir: o que você contar sobre saúde fica só com a equipe do escritório, para analisar o seu caso.'
 /** Texto 3: pergunta juridica vira duvida anotada para o advogado. */

@@ -256,10 +256,13 @@ const S: Suspeita[] = [
   },
   {
     id: 'J07',
-    titulo: 'primeira mensagem não avisa que é atendimento automático nem identifica o escritório',
+    // Desde 21/10/2026 o Lucas tirou o "atendimento automatico" da abertura
+    // (risco do item 2.4 da Recomendacao CFOAB assumido pelo escritorio): o
+    // que nao pode e deixar de identificar o escritorio e a OAB.
+    titulo: 'primeira mensagem não identifica o escritório e a OAB',
     gravidade: 'media',
     falas: ['oi'],
-    confere: (r) => (!/autom|robô|virtual/i.test(r.ultima) || !/Cunha|CB&/i.test(r.ultima) ? `robô: "${r.ultima}"` : ''),
+    confere: (r) => (!/Cunha|CB&/i.test(r.ultima) || !/OAB\/SP 9\.894/.test(r.ultima) ? `robô: "${r.ultima}"` : ''),
   },
   {
     id: 'J08',
