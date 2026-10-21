@@ -1,0 +1,13 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "command",
+  "commandRunner": { "command": "node tests/robo.test.ts" },
+  "mutate": ["supabase/functions/_shared/robo.ts"],
+  "coverageAnalysis": "off",
+  "concurrency": 6,
+  "timeoutMS": 20000,
+  "reporters": ["clear-text", "json"],
+  "jsonReporter": { "fileName": "tests/painel/resultados/stryker.json" },
+  "tempDirName": ".stryker-tmp",
+  "cleanTempDir": true
+}

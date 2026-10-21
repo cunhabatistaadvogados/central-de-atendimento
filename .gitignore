@@ -5,3 +5,8 @@ dist
 *.tsbuildinfo
 tests/*.build.mjs
 tmp
+
+# painel de avaliacao
+.stryker-tmp/
+reports/
+tests/painel/resultados/
