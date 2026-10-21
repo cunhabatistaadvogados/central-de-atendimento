@@ -5,6 +5,7 @@ Configura o numero do robo na Meta pela funcao whatsapp-numero (20/10/2026).
     python scripts/numero_whatsapp.py assinar
     python scripts/numero_whatsapp.py registrar
     python scripts/numero_whatsapp.py foto <imagem.jpg>
+    python scripts/numero_whatsapp.py perfil scripts/perfil_whatsapp.json
 
 "registrar" pede o PIN de duas etapas (6 digitos) escondido: voce cria o PIN
 agora e guarda num lugar seguro; a Meta pede ele se alguem tentar registrar o
@@ -31,7 +32,7 @@ if not CHAVE:
     sys.exit('Falta SUPABASE_SERVICE_ROLE_KEY no .env.local.')
 
 acao = sys.argv[1] if len(sys.argv) > 1 else ''
-if acao not in ('status', 'assinar', 'registrar', 'foto'):
+if acao not in ('status', 'assinar', 'registrar', 'foto', 'perfil'):
     sys.exit(__doc__)
 def pedir_pin(texto):
     # No Windows mostra um * por digito: com o getpass a tela fica parada e
@@ -76,6 +77,11 @@ if acao == 'foto':
         sys.exit('Informe a imagem: python scripts/numero_whatsapp.py foto <imagem.jpg>')
     corpo['app_id'] = APP_ID
     corpo['imagem'] = base64.b64encode(pathlib.Path(sys.argv[2]).read_bytes()).decode()
+if acao == 'perfil':
+    # Textos aprovados pelo escritorio; limites da Meta: Sobre 139, descricao 512.
+    if len(sys.argv) < 3:
+        sys.exit('Informe o arquivo: python scripts/numero_whatsapp.py perfil scripts/perfil_whatsapp.json')
+    corpo['perfil'] = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding='utf-8'))
 
 req = urllib.request.Request(f'{URL}/functions/v1/whatsapp-numero', data=json.dumps(corpo).encode(), method='POST')
 req.add_header('Authorization', f'Bearer {CHAVE}')

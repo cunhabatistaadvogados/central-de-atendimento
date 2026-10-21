@@ -5,6 +5,7 @@
 //   assinar    liga os webhooks do nosso app na conta do WhatsApp nova
 //   registrar  registra o numero na Cloud API com o PIN de duas etapas
 //   foto       troca a foto do perfil do numero (logo do escritorio)
+//   perfil     grava Sobre, descricao, endereco e email do perfil
 //
 // Usa o token do usuario do sistema (segredo WHATSAPP_ACCESS_TOKEN), que so
 // existe aqui dentro. Quem chama precisa mandar a chave service_role: so roda
@@ -78,6 +79,13 @@ Deno.serve(async (req) => {
     const pin = String(corpo.pin ?? '')
     if (!/^\d{6}$/.test(pin)) return json({ error: 'O PIN precisa ter 6 dígitos.' }, 400)
     return json(await meta('POST', `${telefone}/register`, { messaging_product: 'whatsapp', pin }))
+  }
+  if (corpo.acao === 'perfil') {
+    // So os campos enviados mudam; o que nao vier fica como esta na Meta.
+    const permitidos = ['about', 'description', 'address', 'email', 'websites', 'vertical']
+    const campos = Object.fromEntries(permitidos.filter((c) => corpo.perfil?.[c] !== undefined).map((c) => [c, corpo.perfil[c]]))
+    if (!Object.keys(campos).length) return json({ error: 'Nada para mudar no perfil.' }, 400)
+    return json(await meta('POST', `${telefone}/whatsapp_business_profile`, { messaging_product: 'whatsapp', ...campos }))
   }
   return json({ error: 'Ação desconhecida.' }, 400)
 })
