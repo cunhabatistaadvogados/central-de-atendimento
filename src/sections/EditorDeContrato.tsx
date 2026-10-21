@@ -1,9 +1,10 @@
-import { AlertTriangle, BadgeCheck, CheckCircle2, Download, FileSignature, Info, Send } from 'lucide-react'
+import { AlertTriangle, BadgeCheck, CheckCircle2, Download, FileCheck2, FileSignature, Info, Send } from 'lucide-react'
 import { useState } from 'react'
 import { Campo, Interruptor } from '@/components/ui'
 import { rascunhoDoContrato } from '@/lib/atendimento'
 import { dataPorExtenso, faltando, gerarContratoDocx, nomeDoArquivo, segmentosClausula2, segmentosParte, signatario, type Segmento } from '@/lib/contrato'
 import { dataHora } from '@/lib/formato'
+import { linkDoContratoAssinado } from '@/lib/repositorio'
 import { useDados } from '@/lib/store'
 import type { Cliente, Contrato, DadosContrato } from '@/lib/tipos'
 
@@ -226,6 +227,28 @@ export default function EditorDeContrato({ cliente }: { cliente: Cliente }) {
         </label>
         {erro && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{erro}</p>}
         <div className="flex flex-wrap gap-2">
+          {contrato.arquivo && (
+            <button
+              type="button"
+              onClick={() => {
+                // A aba abre no clique (senao o navegador bloqueia) e recebe o
+                // link temporario quando ele chega.
+                const aba = window.open('', '_blank')
+                linkDoContratoAssinado(contrato.arquivo!)
+                  .then((link) => {
+                    if (aba) aba.location.href = link
+                    else window.location.href = link
+                  })
+                  .catch((e: Error) => {
+                    aba?.close()
+                    setErro(e.message)
+                  })
+              }}
+              className="botao-ouro"
+            >
+              <FileCheck2 className="h-4 w-4" /> Ver contrato assinado (PDF)
+            </button>
+          )}
           <button type="button" onClick={aoBaixar} disabled={faltam.length > 0 || baixando} className="botao-claro">
             <Download className="h-4 w-4" /> {baixando ? 'Gerando...' : 'Baixar contrato (.docx)'}
           </button>

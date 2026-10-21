@@ -14,6 +14,16 @@ import type { Cliente, Contrato, DadosContrato, Documentos, Evento, Mensagem, Pe
 
 const DOCS_VAZIOS: Documentos = { rg: false, cpf: false, comprovante: false, cadunico: false, laudo: false }
 
+/**
+ * O que a equipe digita na ficha -> numero do WhatsApp no banco (DDI + DDD +
+ * numero, so digitos). Sem DDI, e do Brasil. Vazio volta a ser "sem WhatsApp".
+ */
+export function numeroDoWhatsApp(digitado: string): string | null {
+  const d = digitado.replace(/\D/g, '')
+  if (!d) return null
+  return d.length === 10 || d.length === 11 ? `55${d}` : d
+}
+
 /** "5513997414361" -> "(13) 99741-4361"; numero de fora do Brasil fica com +. */
 export function formatarTelefone(bruto: string): string {
   const d = bruto.replace(/\D/g, '')
@@ -27,7 +37,8 @@ export function formatarTelefone(bruto: string): string {
 
 interface LinhaCliente {
   id: string
-  telefone: string
+  /** null: contrato importado antes de sabermos o WhatsApp (21/10/2026). */
+  telefone: string | null
   nome: string
   origem: Cliente['origem']
   etapa: Cliente['etapa']
@@ -51,6 +62,7 @@ interface LinhaContrato {
   gerado_em: string | null
   enviado_em: string | null
   assinado_em: string | null
+  arquivo?: string | null
 }
 
 function exigir() {
@@ -193,7 +205,7 @@ function montarClientes(
     return {
       id: l.id,
       nome: l.nome || robo.ficha.nome || '',
-      telefone: formatarTelefone(l.telefone),
+      telefone: l.telefone ? formatarTelefone(l.telefone) : '',
       origem: l.origem,
       criadoEm: l.criado_em,
       atualizadoEm: l.atualizado_em,
@@ -231,6 +243,7 @@ function montarClientes(
             geradoEm: k.gerado_em ?? undefined,
             enviadoEm: k.enviado_em ?? undefined,
             assinadoEm: k.assinado_em ?? undefined,
+            arquivo: k.arquivo ?? undefined,
           }
         : undefined,
       cidade: l.cidade ?? undefined,
@@ -248,6 +261,8 @@ export async function gravarDiferenca(antes: Cliente, depois: Cliente): Promise<
   const db = exigir()
   const campos: Record<string, unknown> = {}
   if (antes.nome !== depois.nome) campos.nome = depois.nome
+  // WhatsApp preenchido na ficha (contrato que chegou antes do numero).
+  if (antes.telefone !== depois.telefone) campos.telefone = numeroDoWhatsApp(depois.telefone)
   if (antes.etapa !== depois.etapa) campos.etapa = depois.etapa
   if (!igual(antes.robo, depois.robo)) campos.robo = depois.robo
   if (!igual(antes.documentos, depois.documentos)) campos.documentos = depois.documentos
@@ -286,7 +301,18 @@ export async function gravarDiferenca(antes: Cliente, depois: Cliente): Promise<
 
   const resultados = await Promise.all(tarefas)
   const erro = resultados.find((r) => r.error)?.error
+  // Numero que ja e de outro cliente: a familia escreveu antes de cadastrarmos
+  // o WhatsApp e o robo abriu outra ficha. Juntar as duas e com o Edu.
+  if (erro && /clientes_telefone_key|duplicate key/.test(erro.message))
+    throw new Error('Esse WhatsApp já está em outra ficha (a família escreveu antes). Peça para juntar as duas.')
   if (erro) throw new Error(`Não consegui salvar no banco: ${erro.message}`)
+}
+
+/** Link temporario (5 min) do PDF assinado no bucket privado "contratos". */
+export async function linkDoContratoAssinado(caminho: string): Promise<string> {
+  const { data, error } = await exigir().storage.from('contratos').createSignedUrl(caminho, 300)
+  if (error || !data?.signedUrl) throw new Error(`Não consegui abrir o contrato: ${error?.message ?? 'arquivo não encontrado'}`)
+  return data.signedUrl
 }
 
 /** Resposta da equipe: a funcao envia pelo WhatsApp, grava e pausa o robo. */

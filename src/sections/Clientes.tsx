@@ -60,7 +60,7 @@ export default function Clientes({ abrirCliente }: { abrirCliente: (id: string) 
                         <div>
                           <p className="font-bold">{c.nome || 'Sem nome ainda'}</p>
                           <p className="flex items-center gap-1.5 text-xs text-slate-400">
-                            {c.telefone} <ChipOrigem origem={c.origem} />
+                            {c.telefone || 'sem WhatsApp'} <ChipOrigem origem={c.origem} />
                           </p>
                         </div>
                       </div>

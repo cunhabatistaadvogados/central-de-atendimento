@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { Avatar, ChipEtapa, ChipOrigem, PainelLateral } from '@/components/ui'
 import { ETAPAS } from '@/lib/escritorio'
 import { dataHora, haQuanto } from '@/lib/formato'
+import { formatarTelefone, numeroDoWhatsApp } from '@/lib/repositorio'
 import { useDados } from '@/lib/store'
 import type { Cliente, Documentos } from '@/lib/tipos'
 import { Bolhas } from './Conversas'
@@ -144,6 +145,38 @@ function Resumo({ c, autor }: { c: Cliente; autor: string }) {
   )
 }
 
+/**
+ * Cliente sem WhatsApp (contrato importado antes do numero, 21/10/2026): a
+ * equipe digita e grava no Enter ou ao sair do campo, nunca a cada tecla, para
+ * nao gravar numero pela metade.
+ */
+function SemWhatsApp({ gravar }: { gravar: (telefone: string) => void }) {
+  const [valor, setValor] = useState('')
+  const [erro, setErro] = useState('')
+  const confirmar = () => {
+    const numero = numeroDoWhatsApp(valor)
+    if (!numero) return
+    if (numero.length < 12 || numero.length > 13) return setErro('Digite com DDD, só números.')
+    setErro('')
+    gravar(formatarTelefone(numero))
+  }
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      <input
+        value={valor}
+        onChange={(e) => setValor(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && confirmar()}
+        onBlur={confirmar}
+        inputMode="tel"
+        aria-label="WhatsApp do cliente"
+        placeholder="sem WhatsApp: digite o número"
+        className="w-52 rounded-lg border border-white/20 bg-white/10 px-2 py-0.5 text-xs text-white outline-none placeholder:text-white/45 focus:border-ouro-400"
+      />
+      {erro && <span className="text-ouro-200">{erro}</span>}
+    </span>
+  )
+}
+
 export default function FichaDoCliente({ id, abaInicial, onFechar, abrirConversa, autor }: { id: string; abaInicial?: AbaFicha; onFechar: () => void; abrirConversa: (id: string) => void; autor: string }) {
   const { cliente, moverEtapa, atualizarCliente } = useDados()
   const c = cliente(id)
@@ -164,7 +197,8 @@ export default function FichaDoCliente({ id, abaInicial, onFechar, abrirConversa
               className="titulo-serif w-full rounded-lg bg-transparent text-[28px] leading-tight text-white outline-none placeholder:text-white/30 focus:bg-white/5"
             />
             <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-white/55">
-              <Smartphone className="h-3.5 w-3.5" /> {c.telefone} <ChipOrigem origem={c.origem} /> · chegou {haQuanto(c.criadoEm)}
+              <Smartphone className="h-3.5 w-3.5" /> {c.telefone || <SemWhatsApp gravar={(telefone) => atualizarCliente(c.id, { telefone })} />} <ChipOrigem origem={c.origem} /> · chegou{' '}
+              {haQuanto(c.criadoEm)}
             </p>
           </div>
           <button type="button" onClick={onFechar} aria-label="Fechar ficha" className="rounded-xl p-2 text-white/60 hover:bg-white/10">

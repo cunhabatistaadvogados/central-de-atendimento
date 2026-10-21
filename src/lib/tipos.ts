@@ -58,6 +58,8 @@ export interface Contrato {
   geradoEm?: string
   enviadoEm?: string
   assinadoEm?: string
+  /** So no modo real: caminho do PDF assinado no bucket privado "contratos". */
+  arquivo?: string
 }
 
 export interface Documentos {

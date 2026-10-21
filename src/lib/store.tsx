@@ -278,6 +278,8 @@ function ProvedorReal({ children }: { children: ReactNode }) {
         throw new Error('Escrever como o cliente só existe na demonstração.')
       },
       responder: async (cid, texto) => {
+        // Contrato importado antes do numero: avisar aqui, e nao com o erro da Meta.
+        if (!atual.current.find((c) => c.id === cid)?.telefone) throw new Error('Este cliente ainda não tem WhatsApp. Adicione o número na ficha antes de responder.')
         await enviarResposta(cid, texto)
         atualizarUm(cid)
       },
