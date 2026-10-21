@@ -10,3 +10,4 @@ tmp
 .stryker-tmp/
 reports/
 tests/painel/resultados/
+relatorios/
