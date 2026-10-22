@@ -10,6 +10,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { contratoComParteFixa, novoEstado, responder, type EstadoRobo, type Etapa } from '../_shared/robo.ts'
 import { assinaturaValida, baixarMidia, enviarTexto } from '../_shared/whatsapp.ts'
+import { interpretar } from '../_shared/interprete.ts'
 
 const ORDEM: Etapa[] = ['novo', 'qualificacao', 'qualificado', 'reuniao', 'contrato', 'contratado']
 
@@ -132,6 +133,17 @@ async function guardarMidia(linhaId: string, clienteId: string, midia: MidiaMeta
   await banco.from('mensagens').update({ midia: caminho }).eq('id', linhaId)
 }
 
+// "Nao entendi" das regras: o contador subiu ou o robo passou para a equipe por isso.
+function naoEntendeu(antes: EstadoRobo, r: { estado: EstadoRobo; sinais: { tipo: string; motivo?: string }[] }): boolean {
+  return r.estado.naoEntendeu > (antes.naoEntendeu ?? 0) || r.sinais.some((s) => s.tipo === 'encaminhar' && /não entendeu/i.test(s.motivo ?? ''))
+}
+
+// A pergunta que a familia viu por ultimo: vai para o interprete como contexto.
+async function ultimaFalaDoRobo(clienteId: string): Promise<string | null> {
+  const { data } = await banco.from('mensagens').select('texto').eq('cliente_id', clienteId).eq('de', 'robo').order('em', { ascending: false }).limit(1).maybeSingle()
+  return data?.texto ?? null
+}
+
 async function evento(clienteId: string, tipo: string, texto: string) {
   await banco.from('eventos').insert({ cliente_id: clienteId, tipo, texto })
 }
@@ -208,7 +220,25 @@ async function processar(m: MensagemMeta) {
   }
 
   const estado: EstadoRobo = cliente.robo?.ficha ? cliente.robo : novoEstado()
-  const r = responder(estado, entrada, em)
+  let r = responder(estado, entrada, em)
+
+  // As regras nao entenderam: o interprete (Claude) reescreve a resposta e o
+  // robo tenta de novo. So vale se a segunda volta entender; senao fica como
+  // antes. Audio e arquivo nao passam (nao ha texto para interpretar).
+  if (naoEntendeu(estado, r) && !/^\[(áudio|arquivo) recebido\]$/.test(entrada)) {
+    const pergunta = await ultimaFalaDoRobo(cliente.id)
+    if (pergunta) {
+      const i = await interpretar(pergunta, entrada)
+      if (i.erro) console.warn('[meta-webhook] interprete:', i.erro)
+      if (i.entendeu) {
+        const segunda = responder(estado, i.resposta, em)
+        if (!naoEntendeu(estado, segunda)) {
+          r = segunda
+          await evento(cliente.id, 'robo', `Intérprete: "${entrada.slice(0, 120)}" entendido como "${i.resposta}"`)
+        }
+      }
+    }
+  }
 
   let etapa: Etapa = cliente.etapa
   let reuniao = cliente.reuniao
