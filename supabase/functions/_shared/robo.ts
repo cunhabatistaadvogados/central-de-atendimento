@@ -165,7 +165,7 @@ export type Sinal =
   | { tipo: 'pendencia'; texto: string; dias: number }
   | { tipo: 'pendencia_resolvida'; texto: string }
   | { tipo: 'etapa'; etapa: Etapa }
-  | { tipo: 'reuniao'; quando: string }
+  | { tipo: 'reuniao'; quando: string; /** ISO do horario exato oferecido (9h, 10h...), quando houver */ em?: string }
   | { tipo: 'duvida'; texto: string }
   | { tipo: 'encerrar'; motivo: string }
   | { tipo: 'origem'; origem?: Origem; campanha?: Campanha }
@@ -1183,13 +1183,59 @@ function proximoDiaUtil(agora: Date): string {
   return dia === 5 || dia === 6 ? 'segunda' : 'amanhã'
 }
 
-export function opcoesDeHorario(agora: Date): { texto: string; opcoes: [string, string] } {
+/**
+ * Horarios ja tomados por outras familias (reuniao confirmada ou pedida), em
+ * ms. Quem chama `responder` passa a lista; fica aqui durante a chamada (sincrona)
+ * para nao carregar o parametro por todas as funcoes que oferecem horario.
+ * Sem isso o robo oferecia "amanha 9h ou 10h" a todo mundo (Catiane, 22/10/2026).
+ */
+let ocupadosDaVez: number[] = []
+const HORAS_DE_REUNIAO = [9, 10, 11, 14, 15, 16]
+const NOME_DO_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado']
+
+/** Horario exato (hora de Santos) no dia util `n` depois de hoje, em UTC. */
+function vagasDoDia(agora: Date, n: number): { rotulo: string; vagas: { hora: number; em: string }[] } {
+  const local = new Date(agora.getTime() - 3 * 3600 * 1000)
+  let dia = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate()))
+  let achados = 0
+  while (achados < n) {
+    dia = new Date(dia.getTime() + 86400000)
+    const sem = dia.getUTCDay()
+    if (sem >= 1 && sem <= 5) achados += 1
+  }
+  const rotulo = n === 1 ? proximoDiaUtil(agora) : NOME_DO_DIA[dia.getUTCDay()]
+  const vagas = HORAS_DE_REUNIAO.map((hora) => ({ hora, ms: dia.getTime() + (hora + 3) * 3600000 }))
+    .filter((v) => !ocupadosDaVez.some((o) => Math.abs(o - v.ms) < 3600000))
+    .map((v) => ({ hora: v.hora, em: new Date(v.ms).toISOString() }))
+  return { rotulo, vagas }
+}
+
+export function opcoesDeHorario(agora: Date): { texto: string; opcoes: [string, string]; em: [string?, string?] } {
   const { hora } = relogioDeSantos(agora)
   const proximo = proximoDiaUtil(agora)
   if (emHorarioComercial(agora) && hora < 16) {
-    return { texto: `hoje à tarde ou ${proximo} de manhã`, opcoes: ['hoje à tarde', `${proximo} de manhã`] }
+    return { texto: `hoje à tarde ou ${proximo} de manhã`, opcoes: ['hoje à tarde', `${proximo} de manhã`], em: [] }
   }
-  return { texto: `${proximo} de manhã, 9h ou 10h`, opcoes: [`${proximo} às 9h`, `${proximo} às 10h`] }
+  // Os dois primeiros horarios livres do proximo dia util que tiver dois.
+  for (let n = 1; n <= 10; n++) {
+    const { rotulo, vagas } = vagasDoDia(agora, n)
+    if (vagas.length < 2) continue
+    const [a, b] = vagas
+    const periodo = a.hora < 12 && b.hora < 12 ? ' de manhã' : a.hora >= 12 ? ' à tarde' : ''
+    return {
+      texto: `${rotulo}${periodo}, ${a.hora}h ou ${b.hora}h`,
+      opcoes: [`${rotulo} às ${a.hora}h`, `${rotulo} às ${b.hora}h`],
+      em: [a.em, b.em],
+    }
+  }
+  return { texto: `${proximo} de manhã, 9h ou 10h`, opcoes: [`${proximo} às 9h`, `${proximo} às 10h`], em: [] }
+}
+
+/** ISO do horario escolhido, quando e um dos dois oferecidos. */
+function emDoHorario(quando: string, agora: Date): string | undefined {
+  const { opcoes, em } = opcoesDeHorario(agora)
+  const i = opcoes.indexOf(quando)
+  return i >= 0 ? em[i] : undefined
 }
 
 const DIAS: [string, string][] = [
@@ -1478,7 +1524,8 @@ const TEM_CADUNICO = /\b(tem sim|temos sim|ja tem|ja temos|(minha|a) familia tem
  * mensagem que o motor nao entende vira "nao entendi" e, na segunda vez,
  * encaminhamento - conversa nunca fica sem dono.
  */
-export function responder(estadoAnterior: EstadoRobo, mensagem: string, agora: Date = new Date()): Resultado {
+export function responder(estadoAnterior: EstadoRobo, mensagem: string, agora: Date = new Date(), ocupados: string[] = []): Resultado {
+  ocupadosDaVez = ocupados.map((o) => new Date(o).getTime()).filter((n) => !Number.isNaN(n))
   const estado: EstadoRobo = { ...estadoAnterior, ficha: { ...estadoAnterior.ficha } }
   const sinais: Sinal[] = []
   const respostas: string[] = []
@@ -1609,7 +1656,7 @@ export function responder(estadoAnterior: EstadoRobo, mensagem: string, agora: D
     const quando = lerHorario(t, agora)
     if (quando) {
       estado.ficha.horario = quando
-      sinais.push({ tipo: 'reuniao', quando }, { tipo: 'etapa', etapa: 'reuniao' })
+      sinais.push({ tipo: 'reuniao', quando, em: emDoHorario(quando, agora) }, { tipo: 'etapa', etapa: 'reuniao' })
       if (estado.fechamento === 'limpo') {
         dizer(`Combinado, ${quando}.`)
         perguntaFeita = 'contrato_ok'
@@ -1713,7 +1760,7 @@ export function responder(estadoAnterior: EstadoRobo, mensagem: string, agora: D
     }
     estado.naoEntendeu = 0
     f.horario = quando
-    sinais.push({ tipo: 'reuniao', quando })
+    sinais.push({ tipo: 'reuniao', quando, em: emDoHorario(quando, agora) })
     sinais.push({ tipo: 'etapa', etapa: 'reuniao' })
     if (estado.fechamento === 'cuidado' || estado.fechamento === 'fraco') {
       // Com impedimento ou caso a olhar com cuidado, o advogado conversa antes: nada de contrato agora.

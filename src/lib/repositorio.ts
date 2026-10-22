@@ -375,3 +375,19 @@ async function chamarEnvio(corpo: Record<string, string | undefined>): Promise<v
   }
   if (data?.error) throw new Error(`O WhatsApp não aceitou o envio: ${data.error}`)
 }
+
+/** Reuniao confirmada vai para a agenda do Dr. Andre no Outlook (funcao outlook-agenda). */
+export async function agendaOutlook(corpo: { acao: 'salvar' | 'apagar'; cliente_id: string; inicio?: string; nome?: string; telefone?: string; autor?: string }): Promise<void> {
+  const { data, error } = await exigir().functions.invoke('outlook-agenda', { body: corpo })
+  let motivo = data?.error as string | undefined
+  if (error) {
+    motivo = error.message
+    try {
+      const c = await (error as { context?: Response }).context?.json()
+      if (c?.error) motivo = c.error
+    } catch {
+      // sem corpo legivel: fica a mensagem generica
+    }
+  }
+  if (motivo) throw new Error(`Agenda do Outlook: ${motivo}`)
+}

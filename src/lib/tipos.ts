@@ -99,6 +99,8 @@ export interface Reuniao {
   quando: string
   /** ISO do horario combinado, quando a equipe confirma */
   data?: string
+  /** ISO do horario exato que a familia escolheu com o robo (9h, 10h...) */
+  pedidoEm?: string
   advogado: string
   confirmada: boolean
 }

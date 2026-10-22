@@ -32,10 +32,12 @@ const DOCS: [keyof Documentos, string][] = [
 ]
 
 function Resumo({ c, autor }: { c: Cliente; autor: string }) {
-  const { documentos, resolverPendencia, confirmarReuniao } = useDados()
+  const { documentos, resolverPendencia, confirmarReuniao, cancelarReuniao, demonstracao } = useDados()
   const f = c.robo.ficha
   const rpp = rendaPorPessoa(f)
-  const [data, setData] = useState('')
+  // Horario exato que a familia escolheu com o robo ja vem no campo.
+  const [data, setData] = useState(() => (c.reuniao?.pedidoEm ? paraCampo(c.reuniao.pedidoEm) : ''))
+  const [remarcando, setRemarcando] = useState(false)
   const para = f.para === 'proprio' ? 'O(a) próprio(a)' : f.para === 'filho' ? 'Filho' : f.para === 'filha' ? 'Filha' : f.quem ? f.quem.replace(/^su[ao] /, '').replace(/^./, (x) => x.toUpperCase()) : undefined
 
   const caminho = [
@@ -139,11 +141,35 @@ function Resumo({ c, autor }: { c: Cliente; autor: string }) {
                 <CalendarCheck2 className={`h-4 w-4 ${c.reuniao.confirmada ? 'text-emerald-600' : 'text-orange-600'}`} />
                 {c.reuniao.confirmada && c.reuniao.data ? dataHora(c.reuniao.data) : `Pedido: ${c.reuniao.quando}`} · {c.reuniao.advogado}
               </p>
-              {!c.reuniao.confirmada && (
+              {c.reuniao.confirmada && !demonstracao && <p className="mt-1 pl-6 text-[11px] text-emerald-700">Na agenda do Outlook do Dr. André, com a Andreia convidada.</p>}
+              {(!c.reuniao.confirmada || remarcando) && (
                 <div className="mt-3 flex gap-2">
                   <input type="datetime-local" value={data} onChange={(e) => setData(e.target.value)} className="campo py-2" />
-                  <button type="button" disabled={!data} onClick={() => confirmarReuniao(c.id, new Date(data).toISOString(), autor)} className="botao-primario shrink-0 py-2">
-                    Confirmar
+                  <button
+                    type="button"
+                    disabled={!data}
+                    onClick={() => {
+                      confirmarReuniao(c.id, new Date(data).toISOString(), autor)
+                      setRemarcando(false)
+                      setData('')
+                    }}
+                    className="botao-primario shrink-0 py-2"
+                  >
+                    {remarcando ? 'Remarcar' : 'Confirmar'}
+                  </button>
+                </div>
+              )}
+              {c.reuniao.confirmada && !remarcando && (
+                <div className="mt-2 flex gap-3 pl-6 text-[11px] font-bold">
+                  <button type="button" onClick={() => setRemarcando(true)} className="text-marinho-700 hover:underline">
+                    Remarcar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.confirm('Desmarcar a reunião? Ela sai da agenda do Outlook e volta para "a confirmar".') && cancelarReuniao(c.id, autor)}
+                    className="text-red-600 hover:underline"
+                  >
+                    Desmarcar
                   </button>
                 </div>
               )}
@@ -314,4 +340,11 @@ export default function FichaDoCliente({ id, abaInicial, onFechar, abrirConversa
       </div>
     </PainelLateral>
   )
+}
+
+/** ISO para o valor do <input type="datetime-local"> (hora do computador). */
+function paraCampo(iso: string): string {
+  const d = new Date(iso)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
 }

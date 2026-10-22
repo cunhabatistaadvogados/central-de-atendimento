@@ -133,6 +133,23 @@ async function guardarMidia(linhaId: string, clienteId: string, midia: MidiaMeta
   await banco.from('mensagens').update({ midia: caminho }).eq('id', linhaId)
 }
 
+/**
+ * Horarios ja tomados por outras familias: reuniao confirmada (data) ou pedida
+ * ao robo num horario exato (pedidoEm). O robo nao oferece esses de novo
+ * (Catiane e outra familia receberam "amanha 9h ou 10h" no mesmo dia).
+ */
+async function horariosOcupados(clienteId: string): Promise<string[]> {
+  const { data, error } = await banco.from('clientes').select('reuniao').not('reuniao', 'is', null).neq('etapa', 'perdido').neq('id', clienteId)
+  if (error) {
+    console.warn('[meta-webhook] horarios ocupados:', error.message)
+    return []
+  }
+  const agora = Date.now()
+  return (data ?? [])
+    .map((l: { reuniao: { data?: string; pedidoEm?: string; confirmada?: boolean } | null }) => (l.reuniao?.confirmada ? l.reuniao.data : l.reuniao?.pedidoEm))
+    .filter((d): d is string => Boolean(d) && new Date(d as string).getTime() > agora - 3600000)
+}
+
 // "Nao entendi" das regras: o contador subiu ou o robo passou para a equipe por isso.
 function naoEntendeu(antes: EstadoRobo, r: { estado: EstadoRobo; sinais: { tipo: string; motivo?: string }[] }): boolean {
   return r.estado.naoEntendeu > (antes.naoEntendeu ?? 0) || r.sinais.some((s) => s.tipo === 'encaminhar' && /não entendeu/i.test(s.motivo ?? ''))
@@ -220,7 +237,8 @@ async function processar(m: MensagemMeta) {
   }
 
   const estado: EstadoRobo = cliente.robo?.ficha ? cliente.robo : novoEstado()
-  let r = responder(estado, entrada, em)
+  const ocupados = await horariosOcupados(cliente.id)
+  let r = responder(estado, entrada, em, ocupados)
 
   // As regras nao entenderam: o interprete (Claude) reescreve a resposta e o
   // robo tenta de novo. So vale se a segunda volta entender; senao fica como
@@ -231,7 +249,7 @@ async function processar(m: MensagemMeta) {
       const i = await interpretar(pergunta, entrada)
       if (i.erro) console.warn('[meta-webhook] interprete:', i.erro)
       if (i.entendeu) {
-        const segunda = responder(estado, i.resposta, em)
+        const segunda = responder(estado, i.resposta, em, ocupados)
         if (!naoEntendeu(estado, segunda)) {
           r = segunda
           await evento(cliente.id, 'robo', `Intérprete: "${entrada.slice(0, 120)}" entendido como "${i.resposta}"`)
@@ -272,7 +290,7 @@ async function processar(m: MensagemMeta) {
     }
     if (s.tipo === 'encaminhar') await evento(cliente.id, 'robo', `Encaminhado à equipe: ${s.motivo}`)
     if (s.tipo === 'reuniao') {
-      reuniao = { quando: s.quando, advogado: 'Dr. André', confirmada: false }
+      reuniao = { quando: s.quando, advogado: 'Dr. André', confirmada: false, ...(s.em ? { pedidoEm: s.em } : {}) }
       const f = r.estado.ficha
       const menor = (f.para === 'filho' || f.para === 'filha') && (f.idade === undefined || f.idade < 18)
       await banco

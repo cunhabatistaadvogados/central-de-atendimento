@@ -121,7 +121,7 @@ export function aplicarSinais(c: Cliente, sinais: Sinal[], em: string): Cliente 
     if (s.tipo === 'reuniao') {
       cli = {
         ...cli,
-        reuniao: { quando: s.quando, advogado: ESCRITORIO.advogadoDoBpc, confirmada: false },
+        reuniao: { quando: s.quando, advogado: ESCRITORIO.advogadoDoBpc, confirmada: false, ...(s.em ? { pedidoEm: s.em } : {}) },
         contrato: cli.contrato ?? rascunhoDoContrato(cli),
         eventos: [...cli.eventos, evento('robo', `Reunião pedida para ${s.quando}. Contrato preparado em rascunho.`, em)],
       }

@@ -3,7 +3,7 @@ import type { Etapa } from '@motor/robo'
 import { enviarComoEquipe, id, novoCliente, rascunhoDoContrato, receberDoCliente } from './atendimento'
 import { baseDeDemonstracao } from './dados-demo'
 import { etapa as infoEtapa } from './escritorio'
-import { carregarClientes, carregarUmCliente, clientesMudadosDesde, enviarResposta, gravarDiferenca } from './repositorio'
+import { agendaOutlook, carregarClientes, carregarUmCliente, clientesMudadosDesde, enviarResposta, gravarDiferenca } from './repositorio'
 import { supabase } from './supabase'
 import type { Base, Cliente, Contrato, Documentos, ExtrasDoEnvio, Origem } from './tipos'
 
@@ -53,6 +53,8 @@ export interface Acoes {
   documentos: (id: string, docs: Documentos) => void
   resolverPendencia: (id: string, pendenciaId: string) => void
   confirmarReuniao: (id: string, data: string, autor: string) => void
+  /** Desfaz a confirmacao: a reuniao volta para "a confirmar" e sai do Outlook. */
+  cancelarReuniao: (id: string, autor: string) => void
   atualizarCliente: (id: string, campos: Partial<Pick<Cliente, 'nome' | 'telefone' | 'cidade' | 'responsavel'>>) => void
   recomecarDemonstracao: () => void
 }
@@ -113,8 +115,14 @@ function transformacoes(mudar: (cid: string, fn: (c: Cliente) => Cliente) => voi
         etapa: ['novo', 'qualificacao', 'qualificado'].includes(c.etapa) ? 'reuniao' : c.etapa,
         reuniao: { quando: c.reuniao?.quando ?? '', advogado: c.reuniao?.advogado ?? 'Dr. André', data, confirmada: true },
         contrato: c.contrato ?? rascunhoDoContrato(c),
-        eventos: [...c.eventos, ev('equipe', `${autor} confirmou a reunião para ${new Date(data).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`)],
+        eventos: [...c.eventos, ev('equipe', `${autor} ${c.reuniao?.confirmada ? 'remarcou' : 'confirmou'} a reunião para ${new Date(data).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`)],
       })),
+    cancelarReuniao: (cid: string, autor: string) =>
+      mudar(cid, (c) =>
+        c.reuniao?.confirmada
+          ? { ...c, reuniao: { ...c.reuniao, data: undefined, confirmada: false }, eventos: [...c.eventos, ev('equipe', `${autor} desmarcou a reunião`)] }
+          : c,
+      ),
     atualizarCliente: (cid: string, campos: Partial<Pick<Cliente, 'nome' | 'telefone' | 'cidade' | 'responsavel'>>) => mudar(cid, (c) => ({ ...c, ...campos })),
   }
 }
@@ -273,8 +281,19 @@ function ProvedorReal({ children }: { children: ReactNode }) {
     [aplicar, gravar],
   )
 
+  // Outlook depois da mudanca na tela: erro vira aviso, a Central segue.
+  const outlook = useCallback(
+    (corpo: Parameters<typeof agendaOutlook>[0]) => {
+      agendaOutlook(corpo).catch((e: Error) => setErro(e.message))
+    },
+    [],
+  )
+
   const acoes = useMemo<Acoes>(
-    () => ({
+    () => {
+      const t = transformacoes(mudar)
+      const tinhaReuniao = (cid: string) => Boolean(atual.current.find((c) => c.id === cid)?.reuniao?.confirmada)
+      return {
       demonstracao: false,
       carregando,
       erro,
@@ -294,10 +313,27 @@ function ProvedorReal({ children }: { children: ReactNode }) {
       novoContato: () => {
         throw new Error('Contato novo chega pelo WhatsApp, não pela tela.')
       },
-      ...transformacoes(mudar),
+      ...t,
+      confirmarReuniao: (cid, data, autor) => {
+        t.confirmarReuniao(cid, data, autor)
+        const c = atual.current.find((x) => x.id === cid)
+        outlook({ acao: 'salvar', cliente_id: cid, inicio: data, nome: c?.nome || c?.telefone, telefone: c?.telefone, autor })
+      },
+      cancelarReuniao: (cid, autor) => {
+        const tinha = tinhaReuniao(cid)
+        t.cancelarReuniao(cid, autor)
+        if (tinha) outlook({ acao: 'apagar', cliente_id: cid })
+      },
+      moverEtapa: (cid, etapa, autor, motivoPerda) => {
+        const tinha = tinhaReuniao(cid)
+        t.moverEtapa(cid, etapa, autor, motivoPerda)
+        // Cliente perdido nao tem reuniao: sai da agenda do Dr. Andre.
+        if (etapa === 'perdido' && tinha) outlook({ acao: 'apagar', cliente_id: cid })
+      },
       recomecarDemonstracao: () => {},
-    }),
-    [clientes, carregando, erro, recarregar, mudar, atualizarUm],
+      }
+    },
+    [clientes, carregando, erro, recarregar, mudar, atualizarUm, outlook],
   )
   return <Contexto.Provider value={acoes}>{children}</Contexto.Provider>
 }

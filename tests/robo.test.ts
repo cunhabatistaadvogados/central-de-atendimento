@@ -32,12 +32,12 @@ function caso(nome: string, fn: () => void) {
   }
 }
 
-function conversa(falas: string[], agora = SEGUNDA_10H, inicio: EstadoRobo = novoEstado()) {
+function conversa(falas: string[], agora = SEGUNDA_10H, inicio: EstadoRobo = novoEstado(), ocupados: string[] = []) {
   let estado: EstadoRobo = inicio
   const robo: string[][] = []
   const sinais: Sinal[] = []
   for (const fala of falas) {
-    const r = responder(estado, fala, agora)
+    const r = responder(estado, fala, agora, ocupados)
     estado = r.estado
     robo.push(r.respostas)
     sinais.push(...r.sinais)
@@ -473,6 +473,23 @@ caso('fora do horario: oferece amanha 9h ou 10h e avisa que a equipe confirma ce
   assert.match(c.ultima, /amanhã de manhã, 9h ou 10h/)
   assert.match(c.ultima, /equipe confirma logo cedo/)
   assert.match(conversa(falas, SEXTA_19H).ultima, /segunda de manhã/)
+})
+
+caso('horario ja tomado por outra familia nao e oferecido de novo (Catiane, 22/10/2026)', () => {
+  const falas = [...ATE_CASA, '4 pessoas 1000 reais', 'não', 'não', 'não']
+  // Terca 9h em Santos = 12h UTC: ja pedida por outra familia.
+  const amanha9h = new Date(SEGUNDA_20H.getTime() + 24 * 3600000)
+  amanha9h.setUTCHours(12, 0, 0, 0)
+  const c = conversa(falas, SEGUNDA_20H, novoEstado(), [amanha9h.toISOString()])
+  assert.match(c.ultima, /amanhã de manhã, 10h ou 11h/)
+  const escolheu = conversa([...falas, '10'], SEGUNDA_20H, novoEstado(), [amanha9h.toISOString()])
+  const pedido = escolheu.sinais.find((s) => s.tipo === 'reuniao')
+  assert.ok(pedido && pedido.tipo === 'reuniao')
+  assert.equal(pedido.quando, 'amanhã às 10h')
+  assert.equal(pedido.em, new Date(amanha9h.getTime() + 3600000).toISOString())
+  // Dia cheio: vai para o dia util seguinte.
+  const cheio = [9, 10, 11, 14, 15].map((h) => new Date(amanha9h.getTime() + (h - 9) * 3600000).toISOString())
+  assert.match(conversa(falas, SEGUNDA_20H, novoEstado(), cheio).ultima, /quarta de manhã, 9h ou 10h/)
 })
 
 caso('"atendem em Minas?" na 1a mensagem: responde, guarda a cidade e nao a toma por nome', () => {
