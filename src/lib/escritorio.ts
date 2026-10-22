@@ -73,6 +73,16 @@ export function etapa(chave: Etapa) {
   return ETAPAS.find((e) => e.chave === chave) ?? ETAPAS[0]
 }
 
+/** Motivos de "Perdido" (Funil e ficha). "Advogado avaliou" pedido pela equipe em 22/10/2026 (Sr. Cicero). */
+export const MOTIVOS_DE_PERDA = [
+  'Advogado avaliou: o benefício não cabe',
+  'Fora do perfil (renda)',
+  'Parou de responder',
+  'Desistiu do pedido',
+  'Fechou com outro escritório',
+  'Número errado',
+]
+
 export const ORIGENS: Record<string, string> = {
   anuncio: 'Anúncio',
   meta: 'Meta',

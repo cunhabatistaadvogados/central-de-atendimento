@@ -3,12 +3,11 @@ import { AlarmClock, Bot, CalendarCheck2, FileSignature } from 'lucide-react'
 import { useState, type DragEvent } from 'react'
 import { Avatar, ChipPublico, Modal } from '@/components/ui'
 import { esperandoEquipe, publicos } from '@/lib/atendimento'
-import { ETAPAS } from '@/lib/escritorio'
+import { ETAPAS, MOTIVOS_DE_PERDA } from '@/lib/escritorio'
 import { haQuanto } from '@/lib/formato'
 import { useDados } from '@/lib/store'
 import type { Cliente } from '@/lib/tipos'
 
-const MOTIVOS_DE_PERDA = ['Parou de responder', 'Fora do perfil (renda)', 'Fechou com outro escritório', 'Desistiu do pedido', 'Número errado']
 
 function Cartao({ c, onAbrir }: { c: Cliente; onAbrir: () => void }) {
   const f = c.robo.ficha

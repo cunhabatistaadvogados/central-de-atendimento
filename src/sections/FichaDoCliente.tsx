@@ -4,7 +4,7 @@ import { AlarmClock, Bot, CalendarCheck2, Check, CheckCircle2, Circle, FileSigna
 import { useState } from 'react'
 import { Avatar, ChipEtapa, ChipOrigem, ChipPublico, PainelLateral } from '@/components/ui'
 import { publicos, textoDoLaudo } from '@/lib/atendimento'
-import { ETAPAS } from '@/lib/escritorio'
+import { ETAPAS, MOTIVOS_DE_PERDA } from '@/lib/escritorio'
 import { dataHora, haQuanto } from '@/lib/formato'
 import { formatarTelefone, numeroDoWhatsApp } from '@/lib/repositorio'
 import { useDados } from '@/lib/store'
@@ -254,6 +254,21 @@ export default function FichaDoCliente({ id, abaInicial, onFechar, abrirConversa
               </option>
             ))}
           </select>
+          {/* Perdido pela ficha tambem pede o motivo, como no Funil. */}
+          {c.etapa === 'perdido' && (
+            <select
+              value={c.motivoPerda ?? ''}
+              onChange={(e) => moverEtapa(c.id, 'perdido', autor, e.target.value)}
+              className={`rounded-full border px-3 py-1 text-[11px] font-bold outline-none ${c.motivoPerda ? 'border-white/15 bg-white/10 text-white' : 'border-ouro-300 bg-ouro-500/25 text-ouro-100'}`}
+            >
+              {!c.motivoPerda && <option value="" disabled className="text-marinho-900">Escolha o motivo</option>}
+              {[...new Set([...MOTIVOS_DE_PERDA, ...(c.motivoPerda ? [c.motivoPerda] : [])])].map((m) => (
+                <option key={m} value={m} className="text-marinho-900">
+                  Motivo: {m}
+                </option>
+              ))}
+            </select>
+          )}
           <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${c.robo.pausado ? 'bg-ouro-500/20 text-ouro-200' : 'bg-emerald-500/20 text-emerald-200'}`}>
             <Bot className="h-3 w-3" /> {c.robo.pausado ? 'equipe no comando' : 'robô atendendo'}
           </span>
