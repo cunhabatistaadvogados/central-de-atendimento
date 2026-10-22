@@ -8,6 +8,7 @@ import { useDados } from '@/lib/store'
 import { supabaseConfigurado } from '@/lib/supabase'
 import type { Membro } from '@/lib/equipe'
 import EquipeEAcessos from './EquipeEAcessos'
+import Simulador from './Simulador'
 
 const REGRAS = [
   'Fala simples: frases curtas, no máximo 2 linhas e 1 pergunta por mensagem.',
@@ -40,6 +41,8 @@ export default function Preferencias({
 }) {
   const { recomecarDemonstracao, demonstracao } = useDados()
   const [confirmando, setConfirmando] = useState(false)
+  // "Testar o robo" saiu do menu e mora aqui (pedido do Edu, 22/10/2026).
+  const [parte, setParte] = useState<'config' | 'robo'>('config')
 
   const integracoes = [
     { icone: Database, nome: 'Banco de dados (Supabase)', detalhe: 'Projeto "LOAS" da conta cunhabatistaadvogados', ok: supabaseConfigurado ? ('parcial' as const) : false, status: supabaseConfigurado ? 'Conectado · tabelas e funções no ar' : 'Modo demonstração' },
@@ -48,8 +51,32 @@ export default function Preferencias({
     { icone: Clock3, nome: 'Retornos automáticos', detalhe: 'Roda de hora em hora no servidor', ok: false, status: 'Liga junto com o WhatsApp' },
   ]
 
+  const abas = (
+    <div className="flex w-fit gap-1 rounded-xl bg-white p-1 text-xs font-bold shadow-sm">
+      {(
+        [
+          ['config', 'Configurações'],
+          ['robo', 'Testar o robô'],
+        ] as const
+      ).map(([k, n]) => (
+        <button key={k} type="button" onClick={() => setParte(k)} className={`rounded-lg px-4 py-2 transition ${parte === k ? 'bg-marinho-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>
+          {n}
+        </button>
+      ))}
+    </div>
+  )
+
+  if (parte === 'robo')
+    return (
+      <div className="space-y-6">
+        {abas}
+        <Simulador />
+      </div>
+    )
+
   return (
     <div className="space-y-6">
+      {abas}
       <EquipeEAcessos membro={membro} quemEstaOnline={quemEstaOnline} aoMudarQuemEstaOnline={aoMudarQuemEstaOnline} />
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_1fr]">

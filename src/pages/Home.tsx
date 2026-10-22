@@ -1,5 +1,4 @@
 import {
-  Bot,
   CalendarDays,
   ChartNoAxesCombined,
   ChevronRight,
@@ -33,10 +32,9 @@ import FichaDoCliente from '@/sections/FichaDoCliente'
 import Funil from '@/sections/Funil'
 import Historico from '@/sections/Historico'
 import Preferencias from '@/sections/Preferencias'
-import Simulador from '@/sections/Simulador'
 import VisaoGeral from '@/sections/VisaoGeral'
 
-export type Aba = 'visao' | 'conversas' | 'funil' | 'campanhas' | 'clientes' | 'contratos' | 'agenda' | 'historico' | 'robo' | 'ajustes'
+export type Aba = 'visao' | 'conversas' | 'funil' | 'campanhas' | 'clientes' | 'contratos' | 'agenda' | 'historico' | 'ajustes'
 type Icone = ComponentType<{ className?: string; strokeWidth?: number }>
 
 const ABAS: { chave: Aba; nome: string; curto: string; icone: Icone }[] = [
@@ -48,7 +46,6 @@ const ABAS: { chave: Aba; nome: string; curto: string; icone: Icone }[] = [
   { chave: 'contratos', nome: 'Contratos', curto: 'Contratos', icone: FileSignature },
   { chave: 'agenda', nome: 'Agenda', curto: 'Agenda', icone: CalendarDays },
   { chave: 'historico', nome: 'Histórico', curto: 'Histórico', icone: History },
-  { chave: 'robo', nome: 'Testar o robô', curto: 'Robô', icone: Bot },
   { chave: 'ajustes', nome: 'Preferências', curto: 'Ajustes', icone: Settings2 },
 ]
 
@@ -61,8 +58,7 @@ const META: Record<Aba, { olho: string; titulo: string; sub: string }> = {
   contratos: { olho: 'Fechamento', titulo: 'Contratos', sub: 'Gerados a partir da minuta do escritório, já na versão certa para cada caso.' },
   agenda: { olho: 'Tempo do advogado', titulo: 'Agenda', sub: 'Reuniões pedidas pelo robô e confirmadas pela equipe.' },
   historico: { olho: 'Pixel Hub', titulo: 'Histórico', sub: 'As conversas antigas, só para consulta. Quem voltar a escrever sai daqui sozinho e aparece em Conversas.' },
-  robo: { olho: 'Simulador', titulo: 'Testar o robô', sub: 'Converse como se fosse a família e veja exatamente o que o robô responde.' },
-  ajustes: { olho: 'Configuração', titulo: 'Preferências', sub: 'Roteiro, honorários, retornos automáticos e integrações.' },
+  ajustes: { olho: 'Configuração', titulo: 'Preferências', sub: 'Equipe, roteiro, honorários, integrações e o simulador do robô.' },
 }
 
 export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () => void }) {
@@ -131,7 +127,7 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
         <div className="grade-suave absolute inset-0 opacity-40" />
         <div className="absolute -right-24 top-24 h-64 w-64 rounded-full bg-ouro-500/10 blur-3xl" />
         <div className="relative flex h-full flex-col">
-          <div className="px-6 pb-6 pt-8 [@media(max-height:820px)]:pb-4 [@media(max-height:820px)]:pt-5">
+          <div className="px-6 pb-6 pt-8 [@media(max-height:960px)]:pb-4 [@media(max-height:960px)]:pt-5 [@media(max-height:760px)]:pb-3 [@media(max-height:760px)]:pt-4">
             <MarcaHorizontal />
             {sessao.demonstracao && (
               <p className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-ouro-500/30 bg-ouro-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-ouro-300">
@@ -140,8 +136,8 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
             )}
           </div>
           <div className="mx-6 h-px bg-gradient-to-r from-ouro-500/40 via-white/10 to-transparent" />
-          <nav aria-label="Navegação principal" className="rolagem-fina mt-5 min-h-0 flex-1 space-y-1 overflow-y-auto px-4 [@media(max-height:820px)]:mt-3 [@media(max-height:820px)]:space-y-0.5">
-            <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Menu</p>
+          <nav aria-label="Navegação principal" className="rolagem-fina mt-5 min-h-0 flex-1 space-y-1 overflow-y-auto px-4 [@media(max-height:960px)]:mt-3 [@media(max-height:960px)]:space-y-0.5">
+            <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-white/30 [@media(max-height:960px)]:mb-1.5">Menu</p>
             {ABAS.map((item) => {
               const ativo = aba === item.chave
               const Icone = item.icone
@@ -151,12 +147,12 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
                   type="button"
                   onClick={() => irPara(item.chave)}
                   aria-current={ativo ? 'page' : undefined}
-                  className={`group flex w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-sm font-semibold transition-all [@media(max-height:820px)]:py-2 ${
+                  className={`group flex w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-sm font-semibold transition-all [@media(max-height:960px)]:py-2 [@media(max-height:760px)]:py-1.5 ${
                     ativo ? 'bg-white text-marinho-900 shadow-[0_12px_28px_rgba(0,0,0,.2)]' : 'text-white/55 hover:bg-white/[0.06] hover:text-white'
                   }`}
                 >
                   <span
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors [@media(max-height:960px)]:h-8 [@media(max-height:960px)]:w-8 [@media(max-height:760px)]:h-7 [@media(max-height:760px)]:w-7 ${
                       ativo ? 'bg-ouro-100 text-ouro-700' : 'bg-white/[0.055] text-white/60 group-hover:text-white'
                     }`}
                   >
@@ -170,7 +166,7 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
           </nav>
           {/* Quem esta online foi para o topo da pagina (como no Marcello); aqui
               voltou o cartao de sigilo, pedido do Edu em 19/10/2026. */}
-          <div className="relative mx-4 mb-4 overflow-hidden rounded-[22px] border border-white/10 bg-white/[0.05] p-4 [@media(max-height:900px)]:hidden">
+          <div className="relative mx-4 mb-4 overflow-hidden rounded-[22px] border border-white/10 bg-white/[0.05] p-4 [@media(max-height:960px)]:hidden">
             <div className="absolute -right-5 -top-5 h-20 w-20 rounded-full bg-ouro-500/15 blur-2xl" />
             <div className="relative flex items-center gap-3">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-ouro-500 text-marinho-950">
@@ -182,7 +178,7 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3 border-t border-white/10 px-6 py-5">
+          <div className="flex items-center gap-3 border-t border-white/10 px-6 py-5 [@media(max-height:960px)]:py-3">
             <SeloCB className="h-10 w-10 shrink-0 rounded-full" />
             <div className="min-w-0">
               <p className="truncate text-xs font-bold text-white/90">{sessao.nome}</p>
@@ -292,7 +288,6 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
             {aba === 'contratos' && <Contratos abrirCliente={abrirCliente} />}
             {aba === 'agenda' && <Agenda abrirCliente={abrirCliente} />}
             {aba === 'historico' && <Historico />}
-            {aba === 'robo' && <Simulador />}
             {aba === 'ajustes' && <Preferencias membro={membro} quemEstaOnline={quemEstaOnlineLigado} aoMudarQuemEstaOnline={setQuemEstaOnlineLigado} />}
           </div>
         </div>
