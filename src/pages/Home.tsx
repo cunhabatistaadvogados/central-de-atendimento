@@ -7,6 +7,7 @@ import {
   FileSignature,
   History,
   LogOut,
+  Megaphone,
   MessageCircle,
   MessagesSquare,
   Settings2,
@@ -24,6 +25,7 @@ import { useDados } from '@/lib/store'
 import QuemEstaOnline from '@/components/QuemEstaOnline'
 import { enviarMinhaFoto, lerMinhaFoto, PAPEIS, useConfigQuemEstaOnline, useQuemEstaOnline } from '@/lib/equipe'
 import Agenda from '@/sections/Agenda'
+import Campanhas from '@/sections/Campanhas'
 import Clientes from '@/sections/Clientes'
 import Contratos from '@/sections/Contratos'
 import Conversas from '@/sections/Conversas'
@@ -34,13 +36,14 @@ import Preferencias from '@/sections/Preferencias'
 import Simulador from '@/sections/Simulador'
 import VisaoGeral from '@/sections/VisaoGeral'
 
-export type Aba = 'visao' | 'conversas' | 'funil' | 'clientes' | 'contratos' | 'agenda' | 'historico' | 'robo' | 'ajustes'
+export type Aba = 'visao' | 'conversas' | 'funil' | 'campanhas' | 'clientes' | 'contratos' | 'agenda' | 'historico' | 'robo' | 'ajustes'
 type Icone = ComponentType<{ className?: string; strokeWidth?: number }>
 
 const ABAS: { chave: Aba; nome: string; curto: string; icone: Icone }[] = [
   { chave: 'visao', nome: 'Visão geral', curto: 'Visão', icone: ChartNoAxesCombined },
   { chave: 'conversas', nome: 'Conversas', curto: 'Conversas', icone: MessagesSquare },
   { chave: 'funil', nome: 'Funil BPC/LOAS', curto: 'Funil', icone: Columns3 },
+  { chave: 'campanhas', nome: 'Campanhas', curto: 'Campanhas', icone: Megaphone },
   { chave: 'clientes', nome: 'Clientes', curto: 'Clientes', icone: UsersRound },
   { chave: 'contratos', nome: 'Contratos', curto: 'Contratos', icone: FileSignature },
   { chave: 'agenda', nome: 'Agenda', curto: 'Agenda', icone: CalendarDays },
@@ -53,6 +56,7 @@ const META: Record<Aba, { olho: string; titulo: string; sub: string }> = {
   visao: { olho: 'Painel do escritório', titulo: 'Visão geral', sub: 'O atendimento BPC/LOAS de ponta a ponta, do primeiro "oi" ao contrato assinado.' },
   conversas: { olho: 'WhatsApp', titulo: 'Conversas', sub: 'O robô qualifica; quando ele passa a bola, a equipe responde daqui.' },
   funil: { olho: 'Jornada do cliente', titulo: 'Funil BPC/LOAS', sub: 'Arraste o cartão para mudar a etapa. O robô avança sozinho até a reunião.' },
+  campanhas: { olho: 'Marketing', titulo: 'Campanhas', sub: 'De onde vem cada contato e quantos viram reunião e contrato.' },
   clientes: { olho: 'Base de atendimento', titulo: 'Clientes', sub: 'Quem chegou, o que contou e o que falta para fechar.' },
   contratos: { olho: 'Fechamento', titulo: 'Contratos', sub: 'Gerados a partir da minuta do escritório, já na versão certa para cada caso.' },
   agenda: { olho: 'Tempo do advogado', titulo: 'Agenda', sub: 'Reuniões pedidas pelo robô e confirmadas pela equipe.' },
@@ -283,6 +287,7 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
             {aba === 'visao' && <VisaoGeral abrirCliente={abrirCliente} irPara={irPara} />}
             {aba === 'conversas' && <Conversas foco={conversaFoco} limparFoco={() => setConversaFoco(null)} abrirCliente={abrirCliente} autor={sessao.nome} />}
             {aba === 'funil' && <Funil abrirCliente={abrirCliente} autor={sessao.nome} />}
+            {aba === 'campanhas' && <Campanhas />}
             {aba === 'clientes' && <Clientes abrirCliente={abrirCliente} />}
             {aba === 'contratos' && <Contratos abrirCliente={abrirCliente} />}
             {aba === 'agenda' && <Agenda abrirCliente={abrirCliente} />}

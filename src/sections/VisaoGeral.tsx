@@ -199,8 +199,15 @@ export default function VisaoGeral({ abrirCliente, irPara }: { abrirCliente: (id
         </section>
 
         <section className="cartao p-6">
-          <p className="rotulo text-ouro-600">Entrada</p>
-          <h2 className="titulo-serif text-2xl">De onde vêm</h2>
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="rotulo text-ouro-600">Entrada</p>
+              <h2 className="titulo-serif text-2xl">De onde vêm</h2>
+            </div>
+            <button type="button" onClick={() => irPara('campanhas')} className="mt-1 flex items-center gap-1 text-xs font-bold text-ouro-700 hover:underline">
+              Ver campanhas <ArrowUpRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
           <div className="mt-5 space-y-3">
             {origens.map((o) => (
               <div key={o.nome} className="flex items-center gap-3">
