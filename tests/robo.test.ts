@@ -646,6 +646,15 @@ caso('F11: pensao contada sem dizer de quem: "Quem recebe?", sem perguntar de no
   assert.match(responder(c.estado, 'ela mesma', SEGUNDA_10H).respostas[0], /^Como ela já recebe um benefício/)
 })
 
+caso('Rodrigo (22/10/2026): nome completo com "da" e o nome; frase solta nao vira nome', () => {
+  const abre = 'Olá! Vim da página sobre BPC/LOAS para TEA e gostaria de uma avaliação do meu caso.'
+  const c = conversa([abre, 'Rodrigo Guilherme Da Costa'])
+  assert.equal(c.ficha.nome, 'Rodrigo Guilherme da Costa')
+  assert.match(c.ultima, /^Prazer, Rodrigo\./)
+  assert.equal(conversa([abre, 'Maria da Silva']).ficha.nome, 'Maria da Silva')
+  for (const f of ['Quero saber mais', 'Gostaria de saber como funciona', 'Ta bom pode ser']) assert.equal(conversa(['Oi', f]).ficha.nome, undefined, f)
+})
+
 caso('Cicero (22/10/2026): "sou sozinho", "ninguem", "moro so" = 1 pessoa na casa, sem "nao entendi"', () => {
   for (const resp of ['Sou sozinho', 'Ninguém', 'moro só', 'estou sozinha', 'Sozinho mesmo', 'só eu']) {
     const c = conversa(['Oi, quero saber do LOAS do idoso', 'Cícero, tenho 70 anos', resp])

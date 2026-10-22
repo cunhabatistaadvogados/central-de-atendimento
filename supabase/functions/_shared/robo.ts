@@ -306,6 +306,20 @@ function extrairNome(original: string, perguntouNome: boolean): string | undefin
   // A 1a palavra so e nome quando a resposta tem cara de nome: "Ana, ele tem
   // 6", "Marcos", "Ana Souza", "Ana e ele tem 6". "Vi o anuncio", "queria
   // saber", "ta bom pode" viraram "Vi", "Queria" e "Ta" (21/10/2026).
+  // Nome completo sozinho: "Rodrigo Guilherme Da Costa", "Maria da Silva"
+  // (familia real de 22/10/2026). Ate 6 palavras, "da/de/do/dos/das" no meio,
+  // e nenhuma palavra pode ser das que nao sao nome ("queria saber mais").
+  const palavras = original.trim().replace(/[.!]+$/, '').split(/\s+/)
+  const ligacao = /^(da|de|do|dos|das|e)$/i
+  if (
+    palavras.length >= 2 &&
+    palavras.length <= 6 &&
+    palavras.every((p) => /^[A-Za-zÀ-ÿ']{2,}$/.test(p)) &&
+    !ligacao.test(palavras[0]) &&
+    !ligacao.test(palavras[palavras.length - 1]) &&
+    palavras.filter((p) => !ligacao.test(p)).every((p) => !NAO_E_NOME.has(normalizar(p)))
+  )
+    return palavras.map((p) => (ligacao.test(p) ? p.toLowerCase() : capitalizar(p))).join(' ')
   const curta = original.trim().match(/^([A-Za-zÀ-ÿ]{2,})(?:\s+[A-Za-zÀ-ÿ]{2,})?\s*$/)
   const primeiro = curta ?? original.trim().match(/^(?:(?:dona|seu|sr\.?|sra\.?)\s+)?([A-Za-zÀ-ÿ]{2,})(?=\s*[,.;!:]|\s+e\s+(?:ele|ela|eu|tenho|minha|meu|o|a)\b)/i)
   if (primeiro && !NAO_E_NOME.has(normalizar(primeiro[1]))) return capitalizar(primeiro[1])
