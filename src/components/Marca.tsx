@@ -51,10 +51,12 @@ export function ArteDoMenu() {
           <stop offset="1" stopColor="#B39A6B" stopOpacity="0" />
         </linearGradient>
       </defs>
-      <path d="M40 120 H330 V700" fill="none" stroke="url(#fio)" strokeWidth="1.2" />
-      <path d="M40 120 V820 Q40 870 90 870 H140" fill="none" stroke="url(#fio)" strokeWidth="1.2" />
-      <path d="M70 160 H360 V740" fill="none" stroke="url(#fio)" strokeWidth=".7" />
-      <path d="M70 160 V780 Q70 820 110 820 H150" fill="none" stroke="url(#fio)" strokeWidth=".7" />
+      {/* Verticais na margem (x 8 e 16): em x 40 e 70 passavam atras da coluna
+          de icones e pareciam um risco na tela (print do Edu, 22/10/2026). */}
+      <path d="M8 120 H330 V700" fill="none" stroke="url(#fio)" strokeWidth="1.2" />
+      <path d="M8 120 V820 Q8 870 58 870 H140" fill="none" stroke="url(#fio)" strokeWidth="1.2" />
+      <path d="M16 160 H360 V740" fill="none" stroke="url(#fio)" strokeWidth=".7" />
+      <path d="M16 160 V780 Q16 820 56 820 H150" fill="none" stroke="url(#fio)" strokeWidth=".7" />
       <text x="150" y="640" fontFamily="'Cormorant Garamond', Georgia, serif" fontWeight="700" fontSize="260" fill="#B39A6B" opacity=".045">
         &amp;
       </text>
