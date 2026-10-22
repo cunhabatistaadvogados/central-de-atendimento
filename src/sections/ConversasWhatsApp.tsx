@@ -273,6 +273,7 @@ export function ConversaWhatsApp({
   abrirCliente,
   religar,
   pausar,
+  resolver,
 }: {
   c: Cliente
   demonstracao: boolean
@@ -295,6 +296,7 @@ export function ConversaWhatsApp({
   abrirCliente: (id: string) => void
   religar: () => void
   pausar: () => void
+  resolver: () => void
 }) {
   useTravarPagina()
   const [menu, setMenu] = useState(false)
@@ -416,7 +418,10 @@ export function ConversaWhatsApp({
         {espera && (
           <p className="flex items-center gap-1.5 border-t border-ouro-200/60 bg-ouro-50 px-4 py-1.5 text-[12px] font-semibold text-ouro-700">
             <span className="pulso-ouro h-2 w-2 shrink-0 rounded-full bg-ouro-500" />
-            <span className="min-w-0 truncate">Esperando a equipe {haQuanto(desde(c))}</span>
+            <span className="min-w-0 flex-1 truncate">Esperando a equipe {haQuanto(desde(c))}</span>
+            <button type="button" onClick={resolver} className="shrink-0 rounded-full border border-ouro-300 bg-white px-2.5 py-0.5 text-[11.5px] font-bold text-ouro-700 active:bg-ouro-100">
+              ✓ Resolvida
+            </button>
           </p>
         )}
       </div>

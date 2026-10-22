@@ -1,4 +1,4 @@
-import { contratoComParteFixa, ehIdoso, novoEstado, primeiroNome, responder, temLaudo, type Etapa, type Ficha, type Sinal } from '@motor/robo'
+import { contratoComParteFixa, ehIdoso, normalizar, novoEstado, primeiroNome, responder, temLaudo, type Etapa, type Ficha, type Sinal } from '@motor/robo'
 import { dadosVazios } from './contrato'
 import { ESCRITORIO, ORIGENS, etapa as infoEtapa } from './escritorio'
 import type { Cliente, Contrato, Evento, Mensagem, Origem } from './tipos'
@@ -170,6 +170,23 @@ export function enviarComoEquipe(c: Cliente, texto: string, autor: string, em: s
 }
 
 /** Esperando a equipe: robo parado e a ultima palavra nao e nossa. */
+const PALAVRAS_DE_AGRADECIMENTO = new Set(
+  'ok okk okay blz beleza ta bom certo certinho combinado obrigado obrigada obrigadao obg brigado brigada muito muitissimo valeu vlw show perfeito otimo entendi entendido amem deus abencoe abencoa tmj tudo joia'.split(' '),
+)
+
+/** Mensagem que nao pede resposta: "Ok", "Muito obrigado!", "Tá bom 🙏", reacao. Midia nunca conta. */
+export function soAgradece(m: Mensagem): boolean {
+  if (m.midiaTipo && m.midiaTipo !== 'figurinha') return false
+  if (/^Reagiu com /.test(m.texto) || m.midiaTipo === 'figurinha') return true
+  const palavras = normalizar(m.texto)
+    .replace(/[^a-z\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+  // So emoji (sem palavra nenhuma) tambem e confirmacao; frase longa nunca e.
+  if (palavras.length > 6) return false
+  return palavras.every((p) => PALAVRAS_DE_AGRADECIMENTO.has(p))
+}
+
 export function esperandoEquipe(c: Cliente): boolean {
   if (c.etapa === 'perdido' || c.etapa === 'contratado') return false
   const ultima = c.mensagens.at(-1)
@@ -179,6 +196,15 @@ export function esperandoEquipe(c: Cliente): boolean {
   const ultimaDoCliente = [...c.mensagens].reverse().find((m) => m.de === 'cliente')
   if (!ultimaDoCliente) return false
   if (ultimaDaEquipe && ultimaDaEquipe.em > ultimaDoCliente.em) return false
+  // A equipe marcou como resolvida e o cliente nao escreveu de novo.
+  if (c.robo.resolvidoAte && ultimaDoCliente.em <= c.robo.resolvidoAte) return false
+  // Depois da resposta da equipe o cliente so agradeceu ou confirmou ("Ok",
+  // "Obrigado", um polegar): nao precisa de resposta (Sr. Cicero, 22/10/2026).
+  // Sem resposta da equipe ainda, um "ok" continua esperando: ninguem atendeu.
+  if (ultimaDaEquipe) {
+    const depois = c.mensagens.filter((m) => m.de === 'cliente' && m.em > ultimaDaEquipe.em && (!c.robo.resolvidoAte || m.em > c.robo.resolvidoAte))
+    if (depois.length && depois.every((m) => soAgradece(m))) return false
+  }
   // Pausa por "decisao em familia" espera a familia, nao a equipe: so conta
   // se o robo passou a bola ou se o cliente falou depois da ultima resposta.
   return c.robo.encaminhado || ultima.de === 'cliente'

@@ -47,6 +47,8 @@ export interface Acoes {
   religarRobo: (id: string) => void
   moverEtapa: (id: string, etapa: Etapa, autor: string, motivoPerda?: string) => void
   marcarLido: (id: string) => void
+  /** Conversa que nao precisa de resposta sai de "esperando a equipe" ate o cliente escrever de novo. */
+  marcarResolvida: (id: string, autor: string) => void
   salvarContrato: (id: string, contrato: Contrato) => void
   documentos: (id: string, docs: Documentos) => void
   resolverPendencia: (id: string, pendenciaId: string) => void
@@ -80,6 +82,12 @@ function transformacoes(mudar: (cid: string, fn: (c: Cliente) => Cliente) => voi
         eventos: [...c.eventos, ev('etapa', `${autor} moveu para ${infoEtapa(etapa).nome}${motivoPerda ? ` (${motivoPerda})` : ''}`)],
       })),
     marcarLido: (cid: string) => mudar(cid, (c) => (c.naoLidas ? { ...c, naoLidas: 0 } : c)),
+    marcarResolvida: (cid: string, autor: string) =>
+      mudar(cid, (c) => {
+        const ultima = [...c.mensagens].reverse().find((m) => m.de === 'cliente')
+        if (!ultima) return c
+        return { ...c, naoLidas: 0, robo: { ...c.robo, resolvidoAte: ultima.em }, eventos: [...c.eventos, ev('equipe', `${autor} marcou a conversa como resolvida`)] }
+      }),
     salvarContrato: (cid: string, contrato: Contrato) =>
       mudar(cid, (c) => {
         const eventos = [...c.eventos]

@@ -156,6 +156,8 @@ export interface EstadoRobo {
   fechamento?: 'limpo' | 'fraco' | 'cuidado'
   /** pediu preco e parcelamento juntos antes de sabermos do laudo */
   parcelasPedidas?: boolean
+  /** a equipe marcou a conversa como resolvida ate esta mensagem do cliente (ISO); so a tela usa */
+  resolvidoAte?: string
 }
 
 export type Sinal =

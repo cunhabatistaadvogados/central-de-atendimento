@@ -105,7 +105,7 @@ function ItemDaLista({ c, ativo, onClick }: { c: Cliente; ativo: boolean; onClic
 }
 
 export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { foco: string | null; limparFoco: () => void; abrirCliente: (id: string) => void; autor: string }) {
-  const { clientes, responder, receber, religarRobo, pausarRobo, marcarLido, demonstracao } = useDados()
+  const { clientes, responder, receber, religarRobo, pausarRobo, marcarLido, marcarResolvida, demonstracao } = useDados()
   const [enviando, setEnviando] = useState(false)
   const [erroEnvio, setErroEnvio] = useState('')
   const [filtro, setFiltro] = useState<Filtro>('todas')
@@ -221,6 +221,7 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
         abrirCliente={abrirCliente}
         religar={() => religarRobo(atual.id)}
         pausar={() => pausarRobo(atual.id, `${autor} pausou o robô`)}
+        resolver={() => marcarResolvida(atual.id, autor)}
       />
     ) : (
       <ListaWhatsApp
@@ -340,7 +341,17 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
               {atual.robo.pausado ? `Equipe no comando · ${atual.robo.motivoPausa ?? ''}` : 'Robô atendendo · responde sozinho e passa para a equipe na hora certa'}
             </span>
             {esperandoEquipe(atual) && (
-              <span className="shrink-0 whitespace-nowrap rounded-full bg-ouro-500 px-2 py-0.5 text-[10px] font-extrabold text-marinho-950">esperando {haQuanto(desde(atual)).replace('há ', '')}</span>
+              <>
+                <span className="shrink-0 whitespace-nowrap rounded-full bg-ouro-500 px-2 py-0.5 text-[10px] font-extrabold text-marinho-950">esperando {haQuanto(desde(atual)).replace('há ', '')}</span>
+                <button
+                  type="button"
+                  onClick={() => marcarResolvida(atual.id, autor)}
+                  title="Não precisa responder: sai de 'esperando a equipe' até o cliente escrever de novo"
+                  className="shrink-0 whitespace-nowrap rounded-full border border-ouro-300 bg-white px-2 py-0.5 text-[10px] font-extrabold text-ouro-700 hover:bg-ouro-100"
+                >
+                  ✓ Marcar como resolvida
+                </button>
+              </>
             )}
           </div>
 
