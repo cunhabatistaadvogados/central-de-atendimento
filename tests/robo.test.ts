@@ -646,6 +646,15 @@ caso('F11: pensao contada sem dizer de quem: "Quem recebe?", sem perguntar de no
   assert.match(responder(c.estado, 'ela mesma', SEGUNDA_10H).respostas[0], /^Como ela já recebe um benefício/)
 })
 
+caso('Cicero (22/10/2026): "sou sozinho", "ninguem", "moro so" = 1 pessoa na casa, sem "nao entendi"', () => {
+  for (const resp of ['Sou sozinho', 'Ninguém', 'moro só', 'estou sozinha', 'Sozinho mesmo', 'só eu']) {
+    const c = conversa(['Oi, quero saber do LOAS do idoso', 'Cícero, tenho 70 anos', resp])
+    assert.equal(c.ficha.pessoasCasa, 1, resp)
+    assert.doesNotMatch(c.ultima, /não entendi|equipe te chamar/, resp)
+  }
+  assert.equal(conversa(['Oi, quero saber do LOAS do idoso', 'Cícero, tenho 70 anos', 'mora só a minha esposa e eu']).ficha.pessoasCasa, 2)
+})
+
 caso('teste do Edu: "boa tarde" no meio nao vira "nao entendi" e o nome dito nao e pedido de novo', () => {
   const c = conversa(['Oi, quero saber do LOAS do idoso', 'Boa tarde', 'Teste'])
   assert.equal(c.robo[1][0], 'Boa tarde! Me conta seu nome e quantos anos tem a pessoa que precisa do benefício?')

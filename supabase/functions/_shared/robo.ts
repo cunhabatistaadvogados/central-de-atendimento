@@ -579,7 +579,12 @@ function contarCasa(texto: string, perguntou: boolean, f: Ficha): number | undef
     }
   }
   if (/\b(moro sozinh[oa]|mora sozinh[oa]|vivo sozinh[oa]|vive sozinh[oa]|eu sozinh[oa]|so eu(?! e))\b/.test(t)) return 1
+  // "Sou sozinho", "estou sozinha", "moro so" (Cicero e outro idoso, 22/10/2026).
+  // "mora so a mae e eu" nao: depois do "so" vem quem mora junto.
+  if (/\b(sou|estou|esta|fico|fica|moro|mora|vivo|vive)\s+(sozinh[oa]|so)\b(?!\s+(eu|ele|ela|com|a|o|as|os|minha|meu|nos|n[oó]s|e)\b)/.test(t)) return 1
   if (!perguntou) return undefined
+  // Resposta curta a "Quem mora com voce?": "Sozinho", "Ninguem", "So eu mesmo".
+  if (/^\W*(sozinh[oa]|ninguem|nenhum[a]?|so eu|eu so|apenas eu|somente eu|ninguem mora comigo|nao mora ninguem|nao tem ninguem)( mesmo)?\W*$/.test(t)) return 1
   // "ja falei, 4": o numero sozinho responde a pergunta da casa.
   const solto = t.match(/(?:^|\s|,)(\d{1,2})(?=\s*$|\s*[,.]|\s+(?!anos|reais|mil|meses|dias|salario))/)
   if (solto && !/\d{3,}/.test(t)) {
