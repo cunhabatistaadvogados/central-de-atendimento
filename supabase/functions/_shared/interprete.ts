@@ -60,7 +60,8 @@ export async function interpretar(perguntaDoRobo: string, respostaDaFamilia: str
       fallbacks: 'default',
       system: INSTRUCOES,
       output_config: { effort: 'low', format: FORMATO },
-      messages: [{ role: 'user', content: `Pergunta do robo: "${perguntaDoRobo}"\nResposta da familia: "${respostaDaFamilia}"` }],
+      // A data de hoje vai junto: "ano retrasado", "fez 7 em agosto" viram numero.
+      messages: [{ role: 'user', content: `Hoje: ${new Date().toISOString().slice(0, 10)}\nPergunta do robo: "${perguntaDoRobo}"\nResposta da familia: "${respostaDaFamilia}"` }],
     } as never)
     const resp = r as unknown as { stop_reason: string; content: { type: string; text?: string }[] }
     if (resp.stop_reason === 'refusal') return { entendeu: false, resposta: '', erro: 'recusa do modelo' }
