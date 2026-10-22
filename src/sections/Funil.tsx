@@ -1,6 +1,6 @@
 import { temLaudo, type Etapa } from '@motor/robo'
 import { AlarmClock, Bot, CalendarCheck2, FileSignature } from 'lucide-react'
-import { useState, type DragEvent } from 'react'
+import { useRef, useState, type DragEvent } from 'react'
 import { Avatar, ChipPublico, Modal } from '@/components/ui'
 import { esperandoEquipe, publicos } from '@/lib/atendimento'
 import { ETAPAS, MOTIVOS_DE_PERDA } from '@/lib/escritorio'
@@ -8,8 +8,7 @@ import { haQuanto } from '@/lib/formato'
 import { useDados } from '@/lib/store'
 import type { Cliente } from '@/lib/tipos'
 
-
-function Cartao({ c, onAbrir }: { c: Cliente; onAbrir: () => void }) {
+function Cartao({ c, onAbrir, arrastando, onArrastar, onSoltar }: { c: Cliente; onAbrir: () => void; arrastando: boolean; onArrastar: () => void; onSoltar: () => void }) {
   const f = c.robo.ficha
   const pendencias = c.pendencias.filter((p) => !p.resolvida).length
   return (
@@ -18,9 +17,11 @@ function Cartao({ c, onAbrir }: { c: Cliente; onAbrir: () => void }) {
       onDragStart={(e) => {
         e.dataTransfer.setData('text/plain', c.id)
         e.dataTransfer.effectAllowed = 'move'
+        onArrastar()
       }}
+      onDragEnd={onSoltar}
       onClick={onAbrir}
-      className="cursor-grab rounded-2xl border border-marinho-900/[0.07] bg-white p-3.5 shadow-[0_2px_6px_rgba(11,31,56,.04)] transition hover:-translate-y-0.5 hover:border-ouro-300 hover:shadow-cartao active:cursor-grabbing"
+      className={`${arrastando ? 'opacity-40' : ''} cursor-grab rounded-2xl border border-marinho-900/[0.07] bg-white p-3.5 shadow-[0_2px_6px_rgba(11,31,56,.04)] transition hover:-translate-y-0.5 hover:border-ouro-300 hover:shadow-cartao active:cursor-grabbing`}
     >
       <div className="flex items-center gap-2.5">
         <Avatar nome={c.nome || c.telefone} tamanho="h-8 w-8 text-[10px]" />
@@ -69,10 +70,27 @@ export default function Funil({ abrirCliente, autor }: { abrirCliente: (id: stri
   // travava desenhando todos. Mostra os mais recentes e abre mais sob pedido.
   const [mostrar, setMostrar] = useState<Partial<Record<Etapa, number>>>({})
   const LOTE = 30
+  // Cartao sendo arrastado: liga a barra de destinos no topo. Com 7 colunas o
+  // quadro passa da tela e o navegador nao rola sozinho para o lado
+  // (dificuldade da equipe, 22/10/2026).
+  const [arrastando, setArrastando] = useState<string | null>(null)
+  const quadro = useRef<HTMLDivElement>(null)
+
+  // Cartao perto da borda do quadro: rola para o lado. O dragover dispara
+  // varias vezes por segundo mesmo parado, entao cada disparo anda um pouco.
+  function rolarPelaBorda(e: DragEvent) {
+    const q = quadro.current
+    if (!q) return
+    const r = q.getBoundingClientRect()
+    const borda = 140
+    if (e.clientX < r.left + borda) q.scrollLeft -= Math.ceil((r.left + borda - e.clientX) / 4)
+    else if (e.clientX > r.right - borda) q.scrollLeft += Math.ceil((e.clientX - (r.right - borda)) / 4)
+  }
 
   function soltar(e: DragEvent, etapa: Etapa) {
     e.preventDefault()
     setSobre(null)
+    setArrastando(null)
     const id = e.dataTransfer.getData('text/plain')
     const c = clientes.find((x) => x.id === id)
     if (!c || c.etapa === etapa) return
@@ -82,7 +100,35 @@ export default function Funil({ abrirCliente, autor }: { abrirCliente: (id: stri
 
   return (
     <>
-      <div className="rolagem-fina -mx-4 flex gap-4 overflow-x-auto px-4 pb-4 sm:-mx-7 sm:px-7 lg:mx-0 lg:px-0">
+      {arrastando && (
+        <div className="fixed inset-x-0 top-3 z-50 flex justify-center px-3">
+          <div className="flex max-w-full gap-1.5 overflow-x-auto rounded-2xl bg-marinho-900/95 p-2 shadow-[0_18px_40px_rgba(15,42,74,.35)] backdrop-blur">
+            {ETAPAS.map((e) => (
+              <div
+                key={e.chave}
+                onDragOver={(ev) => {
+                  ev.preventDefault()
+                  setSobre(e.chave)
+                }}
+                onDragLeave={() => setSobre((s) => (s === e.chave ? null : s))}
+                onDrop={(ev) => soltar(ev, e.chave)}
+                className={`flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-3 text-[12px] font-extrabold transition ${
+                  sobre === e.chave ? 'scale-105 bg-ouro-500 text-marinho-950' : 'bg-white/10 text-white'
+                }`}
+              >
+                <span className={`h-2 w-2 rounded-full ring-1 ring-white/50 ${e.ponto}`} />
+                {e.curto}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <p className="mb-3 hidden text-[11px] text-slate-400 lg:block">Arraste o cartão para a coluna ou para a barra de etapas que aparece no topo. Encostar na borda rola o quadro para o lado.</p>
+      <div
+        ref={quadro}
+        onDragOver={rolarPelaBorda}
+        className="rolagem-fina -mx-4 flex gap-3 overflow-x-auto px-4 pb-4 sm:-mx-7 sm:px-7 lg:mx-0 lg:px-0"
+      >
         {ETAPAS.map((e) => {
           const daEtapa = clientes.filter((c) => c.etapa === e.chave)
           return (
@@ -94,16 +140,16 @@ export default function Funil({ abrirCliente, autor }: { abrirCliente: (id: stri
               }}
               onDragLeave={() => setSobre((s) => (s === e.chave ? null : s))}
               onDrop={(ev) => soltar(ev, e.chave)}
-              className={`flex w-[272px] shrink-0 flex-col rounded-[22px] border p-3 transition ${sobre === e.chave ? 'border-ouro-400 bg-ouro-50' : 'border-marinho-900/[0.06] bg-white/55'}`}
+              className={`flex w-[252px] shrink-0 flex-col rounded-[22px] border p-3 transition lg:max-h-[calc(100dvh-250px)] ${sobre === e.chave ? 'border-ouro-400 bg-ouro-50' : 'border-marinho-900/[0.06] bg-white/55'}`}
             >
               <header className="mb-3 flex items-center gap-2 px-1.5 pt-1">
                 <span className={`h-2.5 w-2.5 rounded-full ${e.ponto}`} />
                 <h2 className="text-[13px] font-extrabold text-marinho-900">{e.nome}</h2>
                 <span className="ml-auto rounded-full bg-white px-2 py-0.5 text-[11px] font-extrabold text-slate-500 shadow-sm">{daEtapa.length}</span>
               </header>
-              <div className="flex min-h-[120px] flex-1 flex-col gap-2.5">
+              <div className="rolagem-fina -mr-1.5 flex min-h-[120px] flex-1 flex-col gap-2.5 pr-1.5 lg:overflow-y-auto">
                 {daEtapa.slice(0, mostrar[e.chave] ?? LOTE).map((c) => (
-                  <Cartao key={c.id} c={c} onAbrir={() => abrirCliente(c.id)} />
+                  <Cartao key={c.id} c={c} onAbrir={() => abrirCliente(c.id)} arrastando={arrastando === c.id} onArrastar={() => setArrastando(c.id)} onSoltar={() => { setArrastando(null); setSobre(null) }} />
                 ))}
                 {daEtapa.length > (mostrar[e.chave] ?? LOTE) && (
                   <button
