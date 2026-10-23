@@ -1,5 +1,6 @@
-import { ArrowLeft, Bot, CircleUser, Hand, MessageCircle, MessagesSquare, PlayCircle, Search, Send, Smartphone, UserRound } from 'lucide-react'
+import { ArrowLeft, Bot, CircleUser, Hand, MessageCircle, MessagesSquare, PlayCircle, RotateCcw, Search, Send, Smartphone, UserRound } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { repetirPergunta as perguntaParaRepetir } from '@motor/robo'
 import { BotaoAnexar, BotaoResponder, Citacao, FaixaDoEnvio, MidiaDaMensagem, podeCitar, previaDaMensagem, textoSemMidia, useArrastarParaResponder } from '@/components/Midia'
 import { Avatar, ChipEtapa, ChipOrigem, Vazio } from '@/components/ui'
 import { desde, esperandoEquipe } from '@/lib/atendimento'
@@ -105,7 +106,7 @@ function ItemDaLista({ c, ativo, onClick }: { c: Cliente; ativo: boolean; onClic
 }
 
 export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { foco: string | null; limparFoco: () => void; abrirCliente: (id: string) => void; autor: string }) {
-  const { clientes, responder, receber, religarRobo, pausarRobo, marcarLido, marcarResolvida, demonstracao } = useDados()
+  const { clientes, responder, repetirPergunta, receber, religarRobo, pausarRobo, marcarLido, marcarResolvida, demonstracao } = useDados()
   const [enviando, setEnviando] = useState(false)
   const [erroEnvio, setErroEnvio] = useState('')
   const [filtro, setFiltro] = useState<Filtro>('todas')
@@ -197,6 +198,22 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
     }
   }
 
+  // "Repetir pergunta do robo": so com o robo atendendo e esperando resposta
+  // (caso Sabrina, 23/10/2026). Ele manda de novo e continua lendo a resposta.
+  const pendente = atual ? (perguntaParaRepetir(atual.robo, new Date())?.texto ?? null) : null
+  async function repetir() {
+    if (!atual || enviando) return
+    setErroEnvio('')
+    setEnviando(true)
+    try {
+      await repetirPergunta(atual.id, autor)
+    } catch (e) {
+      setErroEnvio(e instanceof Error ? e.message : 'Não foi possível repetir a pergunta.')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
   if (telaWhats) {
     return atual ? (
       <ConversaWhatsApp
@@ -222,6 +239,8 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
         religar={() => religarRobo(atual.id)}
         pausar={() => pausarRobo(atual.id, `${autor} pausou o robô`)}
         resolver={() => marcarResolvida(atual.id, autor)}
+        perguntaPendente={pendente}
+        repetir={repetir}
       />
     ) : (
       <ListaWhatsApp
@@ -362,6 +381,18 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
 
           <div className="border-t border-marinho-900/[0.06] bg-white p-3">
             <div className="rolagem-fina mb-2 flex gap-1.5 overflow-x-auto pb-1">
+              {pendente && (
+                <button
+                  type="button"
+                  onClick={repetir}
+                  disabled={enviando}
+                  title={`O robô manda de novo, sem pausar: "${pendente}"`}
+                  className="flex shrink-0 items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  Repetir pergunta do robô
+                </button>
+              )}
               {RESPOSTAS_PRONTAS.map((r) => (
                 <button key={r.nome} type="button" onClick={() => setTexto(r.texto)} className="shrink-0 rounded-full border border-ouro-200 bg-ouro-50 px-3 py-1 text-[11px] font-bold text-ouro-700 hover:bg-ouro-100">
                   {r.nome}

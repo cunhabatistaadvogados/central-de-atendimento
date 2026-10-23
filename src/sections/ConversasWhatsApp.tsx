@@ -1,4 +1,4 @@
-import { AlertCircle, ArrowLeft, Bot, Check, CheckCheck, ChevronDown, Hand, List as ListaIcone, MessageSquareText, MoreVertical, PlayCircle, Search, Send, X } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Bot, Check, CheckCheck, ChevronDown, Hand, List as ListaIcone, MessageSquareText, MoreVertical, PlayCircle, RotateCcw, Search, Send, X } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { BotaoAnexar, BotaoResponder, Citacao, FaixaDoEnvio, MidiaDaMensagem, podeCitar, previaDaMensagem, textoSemMidia, useArrastarParaResponder } from '@/components/Midia'
@@ -274,6 +274,8 @@ export function ConversaWhatsApp({
   religar,
   pausar,
   resolver,
+  perguntaPendente,
+  repetir,
 }: {
   c: Cliente
   demonstracao: boolean
@@ -297,6 +299,9 @@ export function ConversaWhatsApp({
   religar: () => void
   pausar: () => void
   resolver: () => void
+  /** Pergunta que o robo esta esperando; com ela aparece "Repetir pergunta do robô". */
+  perguntaPendente: string | null
+  repetir: () => Promise<void>
 }) {
   useTravarPagina()
   const [menu, setMenu] = useState(false)
@@ -488,6 +493,20 @@ export function ConversaWhatsApp({
       <div className="px-1.5 pt-1" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 6px)' }}>
         {prontas && (
           <div className="sem-barra mb-1.5 flex gap-1.5 overflow-x-auto px-1">
+            {perguntaPendente && (
+              <button
+                type="button"
+                disabled={enviando}
+                onClick={() => {
+                  setProntas(false)
+                  void repetir()
+                }}
+                className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-[#d9fdd3] px-3 py-1.5 text-[12.5px] font-semibold text-[#008069] shadow-[0_1px_0.5px_rgba(11,20,26,.13)] active:bg-[#c6f3bf] disabled:opacity-50"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Repetir pergunta do robô
+              </button>
+            )}
             {RESPOSTAS_PRONTAS.map((r) => (
               <button
                 key={r.nome}

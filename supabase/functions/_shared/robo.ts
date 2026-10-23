@@ -216,6 +216,20 @@ export function anotarComplemento(estadoAnterior: EstadoRobo, complemento: strin
   return { respostas: [`Entendi, anotado. ${textoDaPergunta(p, ficha, agora)}`], estado, sinais: [] }
 }
 
+/**
+ * Botao "Repetir pergunta" da conversa (pedido do Edu, 23/10/2026, caso
+ * Sabrina): a equipe pede e o robo manda de novo a pergunta que ficou, sem
+ * pausar, com o "nao entendi" zerado; a resposta da familia volta a ser lida
+ * por ele. Na escolha de horario nao vale (as opcoes dependem da agenda): ali
+ * a equipe usa "Confirmar reuniao". Null quando nao ha pergunta para repetir.
+ */
+export function repetirPergunta(estado: EstadoRobo, agora: Date = new Date()): { texto: string; estado: EstadoRobo } | null {
+  if (estado.pausado) return null
+  const p = estado.ultimaPergunta === 'retomar' ? estado.voltarPara : estado.ultimaPergunta
+  if (!p || p === 'horario') return null
+  return { texto: textoDaPergunta(p, estado.ficha, agora), estado: { ...estado, ultimaPergunta: p, voltarPara: null, naoEntendeu: 0 } }
+}
+
 // ---------------------------------------------------------------------------
 // Texto
 // ---------------------------------------------------------------------------

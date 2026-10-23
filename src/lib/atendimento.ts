@@ -1,4 +1,4 @@
-import { contratoComParteFixa, ehIdoso, normalizar, novoEstado, primeiroNome, responder, temLaudo, type Etapa, type Ficha, type Sinal } from '@motor/robo'
+import { contratoComParteFixa, ehIdoso, normalizar, novoEstado, primeiroNome, repetirPergunta, responder, temLaudo, type Etapa, type Ficha, type Sinal } from '@motor/robo'
 import { dadosVazios } from './contrato'
 import { ESCRITORIO, ORIGENS, etapa as infoEtapa } from './escritorio'
 import type { Cliente, Contrato, Evento, Mensagem, Origem } from './tipos'
@@ -166,6 +166,19 @@ export function enviarComoEquipe(c: Cliente, texto: string, autor: string, em: s
     atualizadoEm: em,
     naoLidas: 0,
     eventos: assumiu ? [...c.eventos, evento('equipe', `${autor} assumiu a conversa`, em)] : c.eventos,
+  }
+}
+
+/** Botao "Repetir pergunta" na demonstracao: a Mary manda de novo a pergunta que ficou e segue atendendo. */
+export function repetirPerguntaComoRobo(c: Cliente, autor: string, em: string): Cliente {
+  const r = repetirPergunta(c.robo, new Date(em))
+  if (!r) return c
+  return {
+    ...c,
+    robo: r.estado,
+    mensagens: [...c.mensagens, { id: id(), de: 'robo', texto: r.texto, em }],
+    atualizadoEm: em,
+    eventos: [...c.eventos, evento('equipe', `${autor} pediu para o robô repetir a pergunta`, em)],
   }
 }
 

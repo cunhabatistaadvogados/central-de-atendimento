@@ -9,6 +9,7 @@ import {
   Megaphone,
   MessageCircle,
   MessagesSquare,
+  RefreshCw,
   Settings2,
   ShieldCheck,
   Sparkles,
@@ -48,6 +49,15 @@ const ABAS: { chave: Aba; nome: string; curto: string; icone: Icone }[] = [
   { chave: 'historico', nome: 'Histórico', curto: 'Histórico', icone: History },
   { chave: 'ajustes', nome: 'Preferências', curto: 'Ajustes', icone: Settings2 },
 ]
+
+// Hora do build no fuso do escritorio (o GitHub publica em UTC).
+const ATUALIZADO_EM = (() => {
+  const em = new Date(__ATUALIZADO_EM__)
+  const fuso = { timeZone: 'America/Sao_Paulo' } as const
+  const dia = em.toLocaleDateString('pt-BR', { ...fuso, day: '2-digit', month: '2-digit', year: 'numeric' })
+  const hora = em.toLocaleTimeString('pt-BR', { ...fuso, hour: '2-digit', minute: '2-digit' })
+  return `${dia} às ${hora}`
+})()
 
 const META: Record<Aba, { olho: string; titulo: string; sub: string }> = {
   visao: { olho: 'Painel do escritório', titulo: 'Visão geral', sub: 'O atendimento BPC/LOAS de ponta a ponta, do primeiro "oi" ao contrato assinado.' },
@@ -178,6 +188,10 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
               </div>
             </div>
           </div>
+          <p className="flex items-center gap-1.5 px-6 pb-3 text-[10px] text-white/40" title={`Versão ${__COMMIT__}`}>
+            <RefreshCw className="h-3 w-3 shrink-0" />
+            Atualizado em {ATUALIZADO_EM}
+          </p>
           <div className="flex items-center gap-3 border-t border-white/10 px-6 py-5 [@media(max-height:960px)]:py-3">
             <SeloCB className="h-10 w-10 shrink-0 rounded-full" />
             <div className="min-w-0">

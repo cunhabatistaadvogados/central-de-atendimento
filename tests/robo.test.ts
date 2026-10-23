@@ -20,6 +20,7 @@ import {
   proximaRetomada,
   religar,
   anotarComplemento,
+  repetirPergunta,
   type AgendaDaVez,
   type EstadoRobo,
   type Sinal,
@@ -812,6 +813,21 @@ caso('Sabrina 23/10: "Somente na proxima" completa a pergunta do CRAS; anota e r
   // Sem pergunta para repetir (pausado ou esperando horario), fica o caminho normal.
   assert.equal(anotarComplemento({ ...c.estado, pausado: true }, 'x'), null)
   assert.equal(anotarComplemento({ ...c.estado, ultimaPergunta: 'horario' }, 'x'), null)
+})
+
+caso('botao "Repetir pergunta": manda a pergunta que ficou, zera o "nao entendi", nao pausa; sem pergunta ou no horario, nada', () => {
+  const c = conversa(['meu filho tem laudo de autismo de 2025', 'Sabrina, ele tem 3 anos', 'ele faz terapia', 'plano', 'não temos', 'Não', 'Somente na proxima'])
+  assert.equal(c.estado.naoEntendeu, 1)
+  const r = repetirPergunta(c.estado, SEGUNDA_10H)!
+  assert.equal(r.texto, 'Quem mora com ele na mesma casa? (pai, mãe, irmãos...)')
+  assert.equal(r.estado.naoEntendeu, 0)
+  assert.equal(r.estado.pausado, false)
+  assert.equal(r.estado.ultimaPergunta, 'casa')
+  // Depois de repetir, a resposta certa segue a conversa normalmente.
+  assert.equal(conversa(['eu, meu marido e ele'], SEGUNDA_10H, r.estado).estado.ficha.pessoasCasa, 3)
+  assert.equal(repetirPergunta({ ...c.estado, pausado: true }), null)
+  assert.equal(repetirPergunta({ ...c.estado, ultimaPergunta: 'horario' }), null)
+  assert.equal(repetirPergunta({ ...c.estado, ultimaPergunta: 'retomar', voltarPara: 'casa' })!.estado.ultimaPergunta, 'casa')
 })
 
 console.log(`robo: ${total} conversas ok`)

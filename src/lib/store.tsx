@@ -1,9 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { religar, type Etapa } from '@motor/robo'
-import { enviarComoEquipe, id, mensagemDaReuniao, novoCliente, rascunhoDoContrato, receberDoCliente } from './atendimento'
+import { enviarComoEquipe, id, mensagemDaReuniao, novoCliente, rascunhoDoContrato, receberDoCliente, repetirPerguntaComoRobo } from './atendimento'
 import { baseDeDemonstracao } from './dados-demo'
 import { etapa as infoEtapa } from './escritorio'
-import { agendaOutlook, carregarClientes, carregarUmCliente, clientesMudadosDesde, enviarResposta, gravarDiferenca } from './repositorio'
+import { agendaOutlook, carregarClientes, carregarUmCliente, clientesMudadosDesde, enviarResposta, gravarDiferenca, repetirPerguntaPeloWhatsApp } from './repositorio'
 import { supabase } from './supabase'
 import type { Base, Cliente, Contrato, Documentos, ExtrasDoEnvio, Origem } from './tipos'
 
@@ -42,6 +42,8 @@ export interface Acoes {
   /** So na demonstracao: escrever como se fosse o cliente. */
   receber: (id: string, texto: string) => void
   responder: (id: string, texto: string, autor: string, extras?: ExtrasDoEnvio) => Promise<void>
+  /** O robo manda de novo a pergunta que ficou e continua atendendo. */
+  repetirPergunta: (id: string, autor: string) => Promise<void>
   novoContato: (telefone: string, origem: Origem, primeiraMensagem: string) => string
   pausarRobo: (id: string, motivo: string) => void
   religarRobo: (id: string) => void
@@ -156,6 +158,7 @@ function ProvedorDemonstracao({ children }: { children: ReactNode }) {
       cliente: (cid) => base.clientes.find((c) => c.id === cid),
       receber: (cid, texto) => mudar(cid, (c) => receberDoCliente(c, texto, agora())),
       responder: async (cid, texto, autor) => mudar(cid, (c) => enviarComoEquipe(c, texto, autor, agora())),
+      repetirPergunta: async (cid, autor) => mudar(cid, (c) => repetirPerguntaComoRobo(c, autor, agora())),
       novoContato: (telefone, origem, primeira) => {
         const c = receberDoCliente(novoCliente(telefone, origem, agora()), primeira, agora())
         setBase((b) => ({ ...b, clientes: [c, ...b.clientes] }))
@@ -332,6 +335,10 @@ function ProvedorReal({ children }: { children: ReactNode }) {
         // Contrato importado antes do numero: avisar aqui, e nao com o erro da Meta.
         if (!atual.current.find((c) => c.id === cid)?.telefone) throw new Error('Este cliente ainda não tem WhatsApp. Adicione o número na ficha antes de responder.')
         await enviarResposta(cid, texto, extras)
+        atualizarUm(cid)
+      },
+      repetirPergunta: async (cid) => {
+        await repetirPerguntaPeloWhatsApp(cid)
         atualizarUm(cid)
       },
       novoContato: () => {

@@ -1,7 +1,10 @@
 // A equipe responde pela tela. Confere que quem chama e da equipe, envia
 // pela Cloud API, grava a mensagem e pausa o robo naquela conversa (quem
 // assumiu foi uma pessoa; o robo so volta se alguem religar).
+// Com repetir_pergunta (botao da conversa, 23/10/2026) e o contrario: o robo
+// manda de novo a pergunta que ficou e continua atendendo.
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { repetirPergunta } from '../_shared/robo.ts'
 import { enviarMidia, enviarTexto, type TipoDaMeta } from '../_shared/whatsapp.ts'
 
 // Mesmo rotulo do webhook e da tela: e o texto da previa quando nao ha legenda.
@@ -29,9 +32,9 @@ Deno.serve(async (req) => {
   const { data: usuario } = await comoUsuario.auth.getUser()
 
   // midia: caminho no bucket "midias" que a tela acabou de subir (pasta do cliente).
-  const { cliente_id, texto, responde_a, midia, midia_tipo, midia_nome } = await req.json().catch(() => ({}))
+  const { cliente_id, texto, responde_a, midia, midia_tipo, midia_nome, repetir_pergunta } = await req.json().catch(() => ({}))
   const limpo = String(texto ?? '').trim()
-  if (!cliente_id || (!limpo && !midia)) return json({ error: 'cliente_id e texto (ou arquivo) são obrigatórios.' }, 400)
+  if (!cliente_id || (!limpo && !midia && !repetir_pergunta)) return json({ error: 'cliente_id e texto (ou arquivo) são obrigatórios.' }, 400)
   if (midia && (!DA_META[midia_tipo] || !String(midia).startsWith(`${cliente_id}/`))) return json({ error: 'Arquivo inválido.' }, 400)
 
   const banco = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } })
@@ -40,6 +43,19 @@ Deno.serve(async (req) => {
   const { data: membro } = await banco.from('equipe').select('nome').eq('user_id', usuario.user?.id).single()
   const autor = membro?.nome ?? 'Equipe'
   const citada = typeof responde_a === 'string' && responde_a.startsWith('wamid.') ? responde_a : undefined
+
+  // O texto sai do estado do robo no banco (nao da tela, que pode estar velha).
+  if (repetir_pergunta) {
+    const r = cliente.robo ? repetirPergunta(cliente.robo, new Date()) : null
+    if (!r) return json({ error: 'O robô não está esperando resposta nesta conversa: escreva você mesmo.' }, 409)
+    const envio = await enviarTexto(cliente.telefone, r.texto)
+    await banco.from('mensagens').insert({ cliente_id, de: 'robo', texto: r.texto, wamid: envio.wamid ?? null, status_envio: envio.ok ? 'sent' : 'failed', erro_envio: envio.erro ?? null })
+    if (envio.ok) {
+      await banco.from('clientes').update({ robo: r.estado }).eq('id', cliente_id)
+      await banco.from('eventos').insert({ cliente_id, tipo: 'equipe', texto: `${autor} pediu para o robô repetir a pergunta` })
+    }
+    return envio.ok ? json({ ok: true }) : json({ error: envio.erro }, 502)
+  }
 
   let envio
   if (midia) {

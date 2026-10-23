@@ -360,6 +360,11 @@ export async function enviarResposta(clienteId: string, texto: string, extras: E
   await chamarEnvio(corpo)
 }
 
+/** O robo manda de novo a pergunta que ficou, sem pausar (o texto sai do estado no banco). */
+export async function repetirPerguntaPeloWhatsApp(clienteId: string): Promise<void> {
+  await chamarEnvio({ cliente_id: clienteId, repetir_pergunta: 'sim' })
+}
+
 async function chamarEnvio(corpo: Record<string, string | undefined>): Promise<void> {
   const { data, error } = await exigir().functions.invoke('whatsapp-send', { body: corpo })
   if (error) {
