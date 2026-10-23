@@ -1198,9 +1198,24 @@ export interface GradeDaAgenda {
   antecedenciaMin: number
 }
 
-/** Regras da Andreia (22/10/2026): manha das 8h as 11h, tarde a partir das 13h40, terca 15h-16h fechado. */
+function minutos(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number)
+  return h * 60 + (m || 0)
+}
+
+/** "08:00" ate "11:00" de `passo` em `passo` minutos, cabendo a reuniao inteira antes do fim. */
+export function horariosEntre(de: string, ate: string, passo: number): string[] {
+  const lista: string[] = []
+  for (let m = minutos(de); m + passo <= minutos(ate); m += passo) lista.push(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`)
+  return lista
+}
+
+/**
+ * Regras da Andreia (22/10/2026): manha das 8h as 11h, tarde a partir das
+ * 13h40, terca 15h-16h fechado. Cada entrevista dura 30 minutos (Edu).
+ */
 export const GRADE_PADRAO: GradeDaAgenda = {
-  horarios: Object.fromEntries(['1', '2', '3', '4', '5'].map((d) => [d, ['08:00', '09:00', '10:00', '13:40', '14:40', '15:40', '16:40']])),
+  horarios: Object.fromEntries(['1', '2', '3', '4', '5'].map((d) => [d, [...horariosEntre('08:00', '11:00', 30), ...horariosEntre('13:40', '17:10', 30)]])),
   bloqueiosSemanais: [{ dia: 2, de: '15:00', ate: '16:00', motivo: 'Compromisso fixo do Dr. André' }],
   bloqueios: [],
   duracaoMin: 30,
@@ -1225,10 +1240,6 @@ const HORA = 3600000
 const DIA = 86400000
 const NOME_DO_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado']
 
-function minutos(hhmm: string): number {
-  const [h, m] = hhmm.split(':').map(Number)
-  return h * 60 + (m || 0)
-}
 
 /** Brasil sem horario de verao: hora de Santos = UTC-3. */
 const local = (ms: number) => new Date(ms - 3 * HORA)
@@ -1380,8 +1391,14 @@ function lerHorario(t: string, agora: Date): Leitura | null {
     else if (alvo === -2) dia0 = hoje0 + DIA
     else dia0 = hoje0 + ((alvo - new Date(hoje0).getUTCDay() + 7) % 7 || 7) * DIA
   }
+  // "8h" e 8h em ponto; "13h" vale 13h40 so quando a grade nao tem 13h em ponto.
+  const minutoCasa = (ms: number) => {
+    const min = local(ms).getUTCMinutes()
+    if (minuto !== undefined) return min === minuto
+    return min === 0 || !horariosDoDia(diaDeSantos(ms)).some((x) => horaLocal(x) === hora && local(x).getUTCMinutes() === 0)
+  }
   const casa = (ms: number) =>
-    (hora === undefined || (horaLocal(ms) === hora && (minuto === undefined || local(ms).getUTCMinutes() === minuto))) &&
+    (hora === undefined || (horaLocal(ms) === hora && minutoCasa(ms))) &&
     (!periodo || (periodo === 'manha' ? horaLocal(ms) < 12 : horaLocal(ms) >= 12)) &&
     (dia0 === undefined || diaDeSantos(ms) === dia0)
 
@@ -1403,6 +1420,12 @@ function lerHorario(t: string, agora: Date): Leitura | null {
   // Pediu o que ja foi oferecido ("de manha" com 8h e 9h na mesa): nao escolheu.
   if (naOferta.length === 2) return null
 
+  // So a hora ("9") com a oferta de quinta na mesa: e quinta, nao amanha.
+  if (hora !== undefined && dia0 === undefined) {
+    const diaDaOferta = diaDeSantos(oferecidos[0])
+    const mesmoDia = vagas(agora, diaDaOferta, 1, (ms) => casa(ms) && diaDeSantos(ms) === diaDaOferta)
+    if (mesmoDia.length) return marcar(mesmoDia[0])
+  }
   // Fora da oferta: a grade de ate 3 semanas, ou so o dia dito.
   const livres = vagas(agora, dia0 ?? hoje0, dia0 === undefined ? 2 : 6, casa).filter((ms) => dia0 === undefined || diaDeSantos(ms) === dia0)
   if (hora !== undefined) {

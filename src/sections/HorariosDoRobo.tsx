@@ -1,5 +1,5 @@
-import { GRADE_PADRAO, proximosLivres, type GradeDaAgenda } from '@motor/robo'
-import { CalendarClock, Plus, Save, X } from 'lucide-react'
+import { GRADE_PADRAO, horariosEntre, proximosLivres, type GradeDaAgenda } from '@motor/robo'
+import { CalendarClock, Plus, Save, Wand2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { horariosOcupados } from '@/lib/atendimento'
 import { carregarGrade, salvarGrade } from '@/lib/repositorio'
@@ -40,6 +40,7 @@ export default function HorariosDoRobo({ autor }: { autor: string }) {
   const [salvando, setSalvando] = useState(false)
   const [novo, setNovo] = useState<Record<number, string>>({})
   const [bloqueio, setBloqueio] = useState({ data: '', de: '08:00', ate: '18:00', motivo: '' })
+  const [faixa, setFaixa] = useState({ de: '08:00', ate: '11:00', passo: 30, dias: [1, 2, 3, 4, 5] })
 
   useEffect(() => {
     if (demonstracao) {
@@ -81,6 +82,24 @@ export default function HorariosDoRobo({ autor }: { autor: string }) {
     setNovo((x) => ({ ...x, [n]: '' }))
   }
 
+  // Faixa "das 8h as 11h de 30 em 30" vira 8h, 8h30, 9h... nos dias marcados (soma ao que ja tem).
+  const preencher = () => {
+    const novos = horariosEntre(faixa.de, faixa.ate, faixa.passo)
+    mudar((g) => ({
+      ...g,
+      horarios: { ...g.horarios, ...Object.fromEntries(faixa.dias.map((n) => [String(n), [...new Set([...(g.horarios[String(n)] ?? []), ...novos])].sort()])) },
+    }))
+  }
+  const fechadoNaSemana = (n: number, h: string) => {
+    const [a, b] = h.split(':').map(Number)
+    const ini = a * 60 + b
+    return grade.bloqueiosSemanais.some((x) => {
+      const [da, db] = x.de.split(':').map(Number)
+      const [aa, ab] = x.ate.split(':').map(Number)
+      return x.dia === n && da * 60 + db < ini + grade.duracaoMin && ini < aa * 60 + ab
+    })
+  }
+
   const salvar = async () => {
     setSalvando(true)
     setAviso('')
@@ -117,7 +136,11 @@ export default function HorariosDoRobo({ autor }: { autor: string }) {
             <span className="w-20 shrink-0 text-xs font-bold text-marinho-900">{nome}</span>
             {doDia(n).length === 0 && <span className="text-xs text-slate-400">sem atendimento</span>}
             {doDia(n).map((h) => (
-              <span key={h} className="inline-flex items-center gap-1 rounded-full bg-marinho-50 px-2.5 py-1 text-xs font-bold text-marinho-800">
+              <span
+                key={h}
+                title={fechadoNaSemana(n, h) ? 'Cai no bloqueio semanal: o robô não oferece' : undefined}
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${fechadoNaSemana(n, h) ? 'bg-slate-100 text-slate-400 line-through' : 'bg-marinho-50 text-marinho-800'}`}
+              >
                 {hhmm(h)}
                 <button
                   type="button"
@@ -139,9 +162,59 @@ export default function HorariosDoRobo({ autor }: { autor: string }) {
         ))}
       </div>
 
+      <div className="rounded-2xl border border-dashed border-ouro-300 bg-ouro-50/40 p-3">
+        <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-marinho-900">
+          <Wand2 className="h-3.5 w-3.5 text-ouro-600" /> Preencher vários de uma vez
+        </p>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-slate-500">das</span>
+          <input type="time" value={faixa.de} onChange={(e) => setFaixa((f) => ({ ...f, de: e.target.value }))} className="campo w-28 py-1.5 text-xs" aria-label="Das" />
+          <span className="text-slate-500">às</span>
+          <input type="time" value={faixa.ate} onChange={(e) => setFaixa((f) => ({ ...f, ate: e.target.value }))} className="campo w-28 py-1.5 text-xs" aria-label="Às" />
+          <span className="text-slate-500">de</span>
+          <select value={faixa.passo} onChange={(e) => setFaixa((f) => ({ ...f, passo: Number(e.target.value) }))} className="campo w-24 py-1.5 text-xs" aria-label="Intervalo">
+            {[20, 30, 40, 45, 60].map((m) => (
+              <option key={m} value={m}>
+                {m} em {m}
+              </option>
+            ))}
+          </select>
+          <span className="text-slate-500">min</span>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {DIAS.map(({ n, nome }) => {
+            const marcado = faixa.dias.includes(n)
+            return (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setFaixa((f) => ({ ...f, dias: marcado ? f.dias.filter((d) => d !== n) : [...f.dias, n] }))}
+                className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${marcado ? 'bg-marinho-800 text-white' : 'bg-white text-slate-500 ring-1 ring-marinho-900/10'}`}
+              >
+                {nome.slice(0, 3)}
+              </button>
+            )
+          })}
+          <button type="button" onClick={preencher} disabled={!faixa.dias.length || faixa.ate <= faixa.de} className="botao-claro ml-auto px-3 py-1.5 text-xs">
+            <Plus className="h-3.5 w-3.5" /> Pôr nos dias marcados
+          </button>
+          <button
+            type="button"
+            onClick={() => mudar((g) => ({ ...g, horarios: { ...g.horarios, ...Object.fromEntries(faixa.dias.map((n) => [String(n), []])) } }))}
+            disabled={!faixa.dias.length}
+            className="px-2 py-1.5 text-[11px] font-bold text-red-600 hover:underline disabled:opacity-40"
+          >
+            Limpar dias marcados
+          </button>
+        </div>
+        <p className="mt-2 text-[11px] text-slate-500">
+          Ex.: das 8h às 11h de 30 em 30 dá 8h, 8h30, 9h, 9h30, 10h e 10h30 (a última termina às 11h). Riscado = cai num bloqueio semanal.
+        </p>
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-xs font-bold text-marinho-900">
-          Duração da reunião (minutos)
+          Tempo reservado por reunião (minutos)
           <input type="number" min={10} max={180} step={5} value={grade.duracaoMin} onChange={(e) => mudar((g) => ({ ...g, duracaoMin: Number(e.target.value) || 30 }))} className="campo mt-1 py-2" />
         </label>
         <label className="text-xs font-bold text-marinho-900">
