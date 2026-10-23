@@ -25,8 +25,9 @@ import {
 import { enviarModelo, enviarTexto } from '../_shared/whatsapp.ts'
 
 const banco = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } })
-const HORA = 3600000
-const DIA = 24 * HORA
+// Nomes proprios: no painel este arquivo e publicado colado ao robo.ts, que ja tem HORA e DIA.
+const UMA_HORA = 3600000
+const UM_DIA = 24 * UMA_HORA
 
 interface Regua {
   desde: string
@@ -48,7 +49,7 @@ async function agenda(): Promise<AgendaDaVez> {
   ])
   const ocupados = (reunioes.data ?? [])
     .map((l: { reuniao: { data?: string; pedidoEm?: string; confirmada?: boolean } | null }) => (l.reuniao?.confirmada ? l.reuniao.data : l.reuniao?.pedidoEm))
-    .filter((d): d is string => Boolean(d))
+    .filter((d: string | undefined): d is string => Boolean(d))
   return { ocupados, grade: (config.data?.grade as GradeDaAgenda | undefined) ?? undefined }
 }
 
@@ -58,10 +59,10 @@ Deno.serve(async () => {
   const cfg: ConfigDaRetomada = { ...RETOMADA_PADRAO, ...((linha?.valor as Partial<ConfigDaRetomada> | null) ?? {}) }
   if (!cfg.ligado) return Response.json({ ok: true, desligado: true })
   // Nunca de madrugada nem tarde da noite, mesmo se o agendador atrasar.
-  const horaDeSantos = new Date(agora - 3 * HORA).getUTCHours()
+  const horaDeSantos = new Date(agora - 3 * UMA_HORA).getUTCHours()
   if (horaDeSantos < 8 || horaDeSantos >= 20) return Response.json({ ok: true, foraDoHorario: true })
 
-  const limite = new Date(agora - (cfg.ateDias + cfg.tentativas * Math.max(1, cfg.intervaloDias) + 3) * DIA).toISOString()
+  const limite = new Date(agora - (cfg.ateDias + cfg.tentativas * Math.max(1, cfg.intervaloDias) + 3) * UM_DIA).toISOString()
   const { data, error } = await banco
     .from('clientes')
     .select('id, nome, telefone, robo, retomada, ultima_do_cliente_em')
@@ -79,8 +80,8 @@ Deno.serve(async () => {
     const silencio: string = c.ultima_do_cliente_em
     const anterior = c.retomada as Regua | null
     const regua: Regua = anterior?.desde === silencio ? anterior : { desde: silencio, feitas: 0 }
-    if (regua.feitas === 0 && agora - new Date(silencio).getTime() > cfg.ateDias * DIA) continue
-    if (regua.falhouEm && agora - new Date(regua.falhouEm).getTime() < 20 * HORA) continue
+    if (regua.feitas === 0 && agora - new Date(silencio).getTime() > cfg.ateDias * UM_DIA) continue
+    if (regua.falhouEm && agora - new Date(regua.falhouEm).getTime() < 20 * UMA_HORA) continue
     const quando = proximaRetomada(cfg, silencio, regua.feitas, regua.ultimaEm)
     if (quando === null || agora < quando) continue
 
@@ -93,7 +94,7 @@ Deno.serve(async () => {
 
     const tentativa = regua.feitas + 1
     const nome = primeiroNome(c.nome ?? '') || 'tudo bem'
-    const naJanela = agora - new Date(silencio).getTime() < DIA - 10 * 60000
+    const naJanela = agora - new Date(silencio).getTime() < UM_DIA - 10 * 60000
     const texto = naJanela ? mensagemDeRetomada(tentativa, cfg.tentativas, c.nome ?? '', pergunta.texto) : TEXTO_MODELO_RETOMADA.replace('{{1}}', nome).replace('{{2}}', pergunta.texto)
     const envio = naJanela ? await enviarTexto(c.telefone, texto) : await enviarModelo(c.telefone, MODELO_RETOMADA, [nome, pergunta.texto])
 

@@ -1994,7 +1994,8 @@ function conversar(estadoAnterior: EstadoRobo, mensagem: string, agora: Date): R
       dizer(leitura.outras)
       return fim()
     }
-    const quando = leitura?.quando
+    const escolha = leitura && 'quando' in leitura ? leitura : null
+    const quando = escolha?.quando
     if (!quando) {
       if (prazoNovo()) return encaminhar(TEXTO_PRAZO, 'PRIORIDADE: prazo de recurso')
       // Pergunta da familia na hora do horario: texto 3 e a duvida anotada,
@@ -2015,7 +2016,7 @@ function conversar(estadoAnterior: EstadoRobo, mensagem: string, agora: Date): R
     }
     estado.naoEntendeu = 0
     f.horario = quando
-    sinais.push({ tipo: 'reuniao', quando, em: leitura?.em })
+    sinais.push({ tipo: 'reuniao', quando, em: escolha?.em })
     sinais.push({ tipo: 'etapa', etapa: 'reuniao' })
     if (estado.fechamento === 'cuidado' || estado.fechamento === 'fraco') {
       // Com impedimento ou caso a olhar com cuidado, o advogado conversa antes: nada de contrato agora.
