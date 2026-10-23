@@ -1,5 +1,5 @@
 import { GRADE_PADRAO, horariosEntre, proximosLivres, type GradeDaAgenda } from '@motor/robo'
-import { CalendarClock, Plus, Save, Wand2, X } from 'lucide-react'
+import { CalendarClock, CircleHelp, Plus, Save, Wand2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { horariosOcupados } from '@/lib/atendimento'
 import { carregarGrade, salvarGrade } from '@/lib/repositorio'
@@ -27,6 +27,22 @@ function vaga(iso: string): string {
   const f = (o: Intl.DateTimeFormatOptions) => d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', ...o })
   const m = Number(f({ minute: 'numeric' }))
   return `${f({ weekday: 'short' }).replace('.', '')} ${f({ day: '2-digit', month: '2-digit' })}, ${Number(f({ hour: 'numeric', hour12: false }))}h${m ? String(m).padStart(2, '0') : ''}`
+}
+
+/** Rotulo de campo com "?" que abre a explicacao (toque funciona no celular, title nao). */
+function Rotulo({ texto, ajuda }: { texto: string; ajuda: string }) {
+  const [aberta, setAberta] = useState(false)
+  return (
+    <span className="block">
+      <span className="flex items-center gap-1.5">
+        {texto}
+        <button type="button" onClick={() => setAberta((v) => !v)} aria-label={`O que é ${texto.toLowerCase()}?`} aria-expanded={aberta} className="text-slate-400 hover:text-ouro-600">
+          <CircleHelp className="h-3.5 w-3.5" />
+        </button>
+      </span>
+      {aberta && <span className="mt-1 block rounded-lg bg-ouro-50 px-2.5 py-1.5 text-[11px] font-normal leading-snug text-marinho-800">{ajuda}</span>}
+    </span>
+  )
 }
 
 /** Data "2026-10-23" + "08:00" no horario de Brasilia (UTC-3) -> ISO. */
@@ -172,7 +188,7 @@ export default function HorariosDoRobo({ autor }: { autor: string }) {
           <span className="text-slate-500">às</span>
           <input type="time" value={faixa.ate} onChange={(e) => setFaixa((f) => ({ ...f, ate: e.target.value }))} className="campo w-28 py-1.5 text-xs" aria-label="Às" />
           <span className="text-slate-500">de</span>
-          <select value={faixa.passo} onChange={(e) => setFaixa((f) => ({ ...f, passo: Number(e.target.value) }))} className="campo w-24 py-1.5 text-xs" aria-label="Intervalo">
+          <select value={faixa.passo} onChange={(e) => setFaixa((f) => ({ ...f, passo: Number(e.target.value) }))} className="campo w-32 py-1.5 pr-8 text-xs" aria-label="Intervalo">
             {[20, 30, 40, 45, 60].map((m) => (
               <option key={m} value={m}>
                 {m} em {m}
@@ -214,11 +230,17 @@ export default function HorariosDoRobo({ autor }: { autor: string }) {
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-xs font-bold text-marinho-900">
-          Tempo reservado por reunião (minutos)
+          <Rotulo
+            texto="Tempo reservado por reunião (minutos)"
+            ajuda="Quanto tempo cada reunião ocupa na agenda. Com 30, uma reunião às 9h deixa a agenda ocupada até 9h30: o robô não oferece 9h nem 9h15 para outra família. Também vale para os bloqueios: um horário que invade o bloqueio não é oferecido."
+          />
           <input type="number" min={10} max={180} step={5} value={grade.duracaoMin} onChange={(e) => mudar((g) => ({ ...g, duracaoMin: Number(e.target.value) || 30 }))} className="campo mt-1 py-2" />
         </label>
         <label className="text-xs font-bold text-marinho-900">
-          Antecedência mínima (horas)
+          <Rotulo
+            texto="Antecedência mínima (horas)"
+            ajuda="Menor tempo entre a conversa com o robô e o horário que ele oferece. Com 2, se a família fala com o robô às 14h, o primeiro horário oferecido é a partir das 16h. Serve para a equipe ter tempo de se preparar e confirmar."
+          />
           <input type="number" min={0} max={72} value={grade.antecedenciaMin / 60} onChange={(e) => mudar((g) => ({ ...g, antecedenciaMin: Math.round((Number(e.target.value) || 0) * 60) }))} className="campo mt-1 py-2" />
         </label>
       </div>
@@ -267,7 +289,7 @@ export default function HorariosDoRobo({ autor }: { autor: string }) {
             <input type="time" value={bloqueio.de} onChange={(e) => setBloqueio((b) => ({ ...b, de: e.target.value }))} className="campo w-28 py-1.5 text-xs" aria-label="De" />
             <span className="text-xs text-slate-400">até</span>
             <input type="time" value={bloqueio.ate} onChange={(e) => setBloqueio((b) => ({ ...b, ate: e.target.value }))} className="campo w-28 py-1.5 text-xs" aria-label="Até" />
-            <input value={bloqueio.motivo} placeholder="Motivo (opcional)" onChange={(e) => setBloqueio((b) => ({ ...b, motivo: e.target.value }))} className="campo min-w-0 flex-1 py-1.5 text-xs" />
+            <input value={bloqueio.motivo} placeholder="Motivo (opcional)" onChange={(e) => setBloqueio((b) => ({ ...b, motivo: e.target.value }))} className="campo min-w-40 flex-1 py-1.5 text-xs" />
             <button
               type="button"
               disabled={!bloqueio.data || bloqueio.ate <= bloqueio.de}
