@@ -1334,6 +1334,77 @@ export function opcoesDeHorario(agora: Date): { texto: string; opcoes: [string, 
   return { texto: `${proximo} de manhã ou à tarde`, opcoes: [`${proximo} de manhã`, `${proximo} à tarde`], em: [] }
 }
 
+/** Regua de retomada, ajustada em Preferencias (tabela configuracoes, chave "retomada"). */
+export interface ConfigDaRetomada {
+  ligado: boolean
+  tentativas: number
+  intervaloDias: number
+  /** hora de cada tentativa, "HH:MM" de Santos; a lista se repete se for menor */
+  horarios: string[]
+  /** horas minimas de silencio antes da 1a tentativa */
+  esperaMinHoras: number
+  /** so comeca a retomar quem parou ha ate X dias */
+  ateDias: number
+}
+
+/** Lucas (22/10/2026): 3 a 4 vezes em horarios diferentes; Edu: 4, uma por dia, a 1a as 8h. */
+export const RETOMADA_PADRAO: ConfigDaRetomada = { ligado: true, tentativas: 4, intervaloDias: 1, horarios: ['08:00', '12:30', '18:30', '10:00'], esperaMinHoras: 8, ateDias: 7 }
+
+/** Modelo da Meta (Utilidade, pt_BR) para fora da janela de 24h: {{1}} nome, {{2}} a pergunta. */
+export const MODELO_RETOMADA = 'retomar_atendimento'
+export const TEXTO_MODELO_RETOMADA = 'Olá, {{1}}. Atualização do seu atendimento de BPC/LOAS com o escritório Cunha Batista: para seguir, falta só esta resposta: {{2}} É só responder por aqui.'
+
+/**
+ * Quando sai a proxima tentativa (ms UTC) ou null se a regua acabou. A 1a vai
+ * no primeiro horario depois da espera minima; as outras, `intervaloDias`
+ * depois da anterior, cada uma no seu horario. Domingo passa para segunda.
+ */
+export function proximaRetomada(cfg: ConfigDaRetomada, silencioDesde: string, feitas: number, ultimaEm?: string): number | null {
+  if (!cfg.ligado || feitas >= cfg.tentativas || !cfg.horarios.length) return null
+  const inicio = minutos(cfg.horarios[feitas % cfg.horarios.length]) * 60000 + 3 * HORA
+  const silencio = new Date(silencioDesde).getTime()
+  let dia: number
+  if (feitas === 0) {
+    dia = diaDeSantos(silencio)
+    while (dia + inicio < silencio + cfg.esperaMinHoras * HORA) dia += DIA
+  } else dia = diaDeSantos(new Date(ultimaEm ?? silencioDesde).getTime()) + Math.max(1, cfg.intervaloDias) * DIA
+  while (new Date(dia).getUTCDay() === 0) dia += DIA
+  return dia + inicio
+}
+
+/** Texto livre (dentro das 24h): muda a cada tentativa; a ultima avisa que pausa. */
+export function mensagemDeRetomada(tentativa: number, total: number, nome: string | undefined, pergunta: string): string {
+  const n = primeiroNome(nome)
+  const oi = n ? `Oi, ${n}!` : 'Oi!'
+  if (tentativa >= total && total > 1) return `${n ? `${n}, vou` : 'Vou'} deixar seu atendimento do BPC em pausa por enquanto. Quando quiser seguir, é só responder aqui. ${pergunta}`
+  const frases = [
+    `${oi} Aqui é a Mary, da CB&AA. Vamos continuar seu atendimento do BPC? ${pergunta}`,
+    `${oi} Seu atendimento do BPC continua aberto aqui. ${pergunta}`,
+    `${oi} Ainda dá para seguir com seu atendimento do BPC. ${pergunta}`,
+  ]
+  return frases[(tentativa - 1) % frases.length]
+}
+
+/**
+ * Retomada (Lucas e Edu, 22/10/2026): a familia parou de responder e o robo
+ * volta a chamar repetindo a pergunta em que ela parou, para ela so responder
+ * e a conversa seguir dali. Null quando o robo nao espera nada dela.
+ * `ofertas`: os horarios oferecidos de novo, para gravar no estado.
+ */
+export function perguntaParaRetomar(estado: EstadoRobo, agora: Date, agenda: AgendaDaVez = {}): { texto: string; ofertas?: string[] } | null {
+  if (estado.pausado) return null
+  const p = estado.ultimaPergunta === 'retomar' ? estado.voltarPara : estado.ultimaPergunta
+  if (!p) return null
+  gradeDaVez = agenda.grade ?? GRADE_PADRAO
+  ocupadosDaVez = (agenda.ocupados ?? []).map((o) => new Date(o).getTime()).filter((n) => !Number.isNaN(n))
+  ofertaDaVez = estado.ofertas?.map((o) => new Date(o).getTime()) ?? null
+  if (p === 'horario') {
+    const { texto, em } = opcoesDeHorario(agora)
+    return { texto: `Para marcar com o Dr. André: ${texto} é melhor para você?`, ofertas: em.filter((e): e is string => Boolean(e)) }
+  }
+  return { texto: textoDaPergunta(p, estado.ficha, agora) }
+}
+
 /** Para a tela Agenda: os proximos horarios que o robo ofereceria com esta grade. */
 export function proximosLivres(agora: Date, agenda: AgendaDaVez, quantas = 6): string[] {
   gradeDaVez = agenda.grade ?? GRADE_PADRAO

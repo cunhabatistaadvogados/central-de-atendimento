@@ -14,6 +14,10 @@ import {
   novoEstado,
   responder,
   GRADE_PADRAO,
+  RETOMADA_PADRAO,
+  mensagemDeRetomada,
+  perguntaParaRetomar,
+  proximaRetomada,
   type AgendaDaVez,
   type EstadoRobo,
   type Sinal,
@@ -515,6 +519,43 @@ caso('grade da equipe: so oferece o que a Andreia liberou, sem bloqueio', () => 
   assert.ok(conversa([...falas, '13h'], SEGUNDA_10H).sinais.some((s) => s.tipo === 'reuniao' && s.quando === 'hoje às 13h40'))
   // "de manha" sem dia: os dois primeiros livres de manha.
   assert.equal(conversa([...falas, 'de manhã'], SEGUNDA_10H).ultima, 'Amanhã de manhã tenho 8h ou 8h30. Qual fica melhor?')
+})
+
+caso('retomada: 4 tentativas, uma por dia em horarios diferentes, domingo nao (Lucas e Edu, 22/10/2026)', () => {
+  const cfg = RETOMADA_PADRAO
+  const quando = (desde: string, feitas: number, ultima?: string) => {
+    const ms = proximaRetomada(cfg, desde, feitas, ultima)
+    return ms === null ? null : new Date(ms).toISOString()
+  }
+  // Parou segunda 16h (Santos): 1a na terca 8h, 2a quarta 12h30, 3a quinta 18h30, 4a sexta 10h.
+  assert.equal(quando('2026-10-19T19:00:00.000Z', 0), '2026-10-20T11:00:00.000Z')
+  assert.equal(quando('2026-10-19T19:00:00.000Z', 1, '2026-10-20T11:00:00.000Z'), '2026-10-21T15:30:00.000Z')
+  assert.equal(quando('2026-10-19T19:00:00.000Z', 2, '2026-10-21T15:30:00.000Z'), '2026-10-22T21:30:00.000Z')
+  assert.equal(quando('2026-10-19T19:00:00.000Z', 3, '2026-10-22T21:30:00.000Z'), '2026-10-23T13:00:00.000Z')
+  assert.equal(quando('2026-10-19T19:00:00.000Z', 4, '2026-10-23T13:00:00.000Z'), null)
+  // Parou sabado 16h: domingo nao, vai segunda 8h.
+  assert.equal(quando('2026-10-24T19:00:00.000Z', 0), '2026-10-26T11:00:00.000Z')
+  // Parou segunda 23h: terca 8h ja passou das 8h de espera.
+  assert.equal(quando('2026-10-20T02:00:00.000Z', 0), '2026-10-20T11:00:00.000Z')
+  assert.equal(proximaRetomada({ ...cfg, ligado: false }, '2026-10-19T19:00:00.000Z', 0), null)
+
+  // Repete a pergunta em que parou.
+  const parou = conversa([...ATE_CASA])
+  const p = perguntaParaRetomar(parou.estado, SEGUNDA_20H)
+  assert.ok(p && parou.ultima.endsWith(p.texto), `retomada "${p?.texto}" fora de "${parou.ultima}"`)
+  // Parou no horario: oferece de novo o que esta livre agora (a oferta antiga ja passou).
+  const noHorario = conversa([...ATE_CASA, '3 pessoas, renda de 1500', 'não', 'ninguém', 'não'])
+  const terca8h = new Date('2026-10-20T11:00:00.000Z')
+  const h = perguntaParaRetomar(noHorario.estado, terca8h)
+  assert.equal(h?.texto, 'Para marcar com o Dr. André: hoje de manhã, 10h ou 10h30 é melhor para você?')
+  assert.deepEqual(h?.ofertas, ['2026-10-20T13:00:00.000Z', '2026-10-20T13:30:00.000Z'])
+  // E a resposta "10" depois da retomada marca terca 10h.
+  const marcou = responder({ ...noHorario.estado, ofertas: h!.ofertas }, '10', terca8h)
+  assert.ok(marcou.sinais.some((s) => s.tipo === 'reuniao' && s.quando === 'hoje às 10h'))
+  // Robo pausado (equipe assumiu): nada.
+  assert.equal(perguntaParaRetomar({ ...parou.estado, pausado: true }, SEGUNDA_20H), null)
+  assert.match(mensagemDeRetomada(1, 4, 'Ana Souza', 'Qual a renda?'), /^Oi, Ana! Aqui é a Mary, da CB&AA\. .* Qual a renda\?$/)
+  assert.match(mensagemDeRetomada(4, 4, 'Ana', 'Qual a renda?'), /^Ana, vou deixar seu atendimento do BPC em pausa/)
 })
 
 caso('"atendem em Minas?" na 1a mensagem: responde, guarda a cidade e nao a toma por nome', () => {

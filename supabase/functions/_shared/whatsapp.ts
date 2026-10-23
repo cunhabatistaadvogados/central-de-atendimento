@@ -73,3 +73,11 @@ export async function assinaturaValida(corpoCru: string, cabecalho: string | nul
   for (let i = 0; i < hex.length; i++) diferenca |= hex.charCodeAt(i) ^ esperado.charCodeAt(i)
   return diferenca === 0
 }
+
+/** Modelo aprovado pela Meta (fora da janela de 24h). Parametro nao pode ter quebra de linha. */
+export function enviarModelo(para: string, nome: string, parametros: string[]): Promise<ResultadoEnvio> {
+  return postar(para, {
+    type: 'template',
+    template: { name: nome, language: { code: 'pt_BR' }, components: [{ type: 'body', parameters: parametros.map((text) => ({ type: 'text', text: text.replace(/\s+/g, ' ').trim() })) }] },
+  })
+}

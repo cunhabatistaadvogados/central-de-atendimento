@@ -1,4 +1,4 @@
-import { FOLLOWUP_PENDENCIA, FOLLOWUP_SEM_RESPOSTA, SALARIO_MINIMO, VERSAO_DO_ROTEIRO, dinheiro } from '@motor/robo'
+import { FOLLOWUP_PENDENCIA, SALARIO_MINIMO, VERSAO_DO_ROTEIRO, dinheiro } from '@motor/robo'
 import { Building2, CheckCircle2, CircleDashed, Clock3, Database, FileSignature, MessageCircle, RotateCcw, Scale, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 import { SeloCB } from '@/components/Marca'
@@ -8,6 +8,7 @@ import { useDados } from '@/lib/store'
 import { supabaseConfigurado } from '@/lib/supabase'
 import type { Membro } from '@/lib/equipe'
 import EquipeEAcessos from './EquipeEAcessos'
+import RetomadaDoRobo from './RetomadaDoRobo'
 import Simulador from './Simulador'
 
 const REGRAS = [
@@ -48,7 +49,7 @@ export default function Preferencias({
     { icone: Database, nome: 'Banco de dados (Supabase)', detalhe: 'Projeto "LOAS" da conta cunhabatistaadvogados', ok: supabaseConfigurado ? ('parcial' as const) : false, status: supabaseConfigurado ? 'Conectado · tabelas e funções no ar' : 'Modo demonstração' },
     { icone: MessageCircle, nome: 'WhatsApp Business (API oficial da Meta)', detalhe: `Número do robô: ${ESCRITORIO.whatsappDoRobo}`, ok: 'parcial' as const, status: 'App publicado · falta ativar o número real' },
     { icone: FileSignature, nome: 'D4Sign (assinatura digital)', detalhe: 'Envio automático do contrato e aviso quando assinar', ok: false, status: 'Aguardando plano com API' },
-    { icone: Clock3, nome: 'Retornos automáticos', detalhe: 'Roda de hora em hora no servidor', ok: false, status: 'Liga junto com o WhatsApp' },
+    { icone: Clock3, nome: 'Retornos automáticos', detalhe: 'Retomada de quem parou (a cada 15 min) e lembrete da reunião (a cada 10 min)', ok: 'parcial' as const, status: 'No ar · modelos da Meta em aprovação' },
   ]
 
   const abas = (
@@ -174,11 +175,7 @@ export default function Preferencias({
             <Clock3 className="h-3.5 w-3.5" /> Retornos automáticos
           </p>
           <div className="mt-4 space-y-3">
-            <div className="rounded-2xl bg-ouro-50/70 p-4">
-              <p className="text-xs font-extrabold text-marinho-900">Sem resposta há 23 horas</p>
-              <p className="mt-1 text-sm text-slate-600">{FOLLOWUP_SEM_RESPOSTA}</p>
-              <p className="mt-2 text-[10px] text-slate-400">23h para cair dentro da janela de 24h do WhatsApp.</p>
-            </div>
+            <RetomadaDoRobo membro={membro} demonstracao={demonstracao} />
             <div className="rounded-2xl bg-ouro-50/70 p-4">
               <p className="text-xs font-extrabold text-marinho-900">Pendência vencida (CadÚnico, laudo, decisão em família, assinatura)</p>
               <p className="mt-1 text-sm text-slate-600">{FOLLOWUP_PENDENCIA}</p>
