@@ -8,7 +8,7 @@
 // Segredos: WHATSAPP_VERIFY_TOKEN, META_APP_SECRET, WHATSAPP_ACCESS_TOKEN,
 // WHATSAPP_PHONE_NUMBER_ID. SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY ja vem do ambiente.
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { anotarComplemento, contornar, contratoComParteFixa, novoEstado, responder, type AgendaDaVez, type EstadoRobo, type Etapa, type GradeDaAgenda } from '../_shared/robo.ts'
+import { anotarComplemento, contornar, contratoComParteFixa, novoEstado, responder, respostaAtrasada, type AgendaDaVez, type EstadoRobo, type Etapa, type GradeDaAgenda } from '../_shared/robo.ts'
 import { assinaturaValida, baixarMidia, enviarTexto } from '../_shared/whatsapp.ts'
 import { interpretar, type Fala } from '../_shared/interprete.ts'
 
@@ -273,8 +273,9 @@ async function processar(m: MensagemMeta) {
 }
 
 // Espera para juntar a rajada ("mais ou menos" / "eu trabalho clt" / "mas o
-// liquido e menos" e um pensamento so).
-const AGRUPAR_MS = 4000
+// liquido e menos" e um pensamento so). Era 4 s; o "não" e "nenhuma" da
+// Sabrina vieram com 6 s de diferenca (23/10/2026).
+const AGRUPAR_MS = 8000
 const esperar = (ms: number) => new Promise((ok) => setTimeout(ok, ms))
 
 interface Pendente {
@@ -366,6 +367,17 @@ async function rodarORobo(cliente: any, telefone: string, pendentes: Pendente[])
   const em = new Date(comEntrada.at(-1)!.em)
 
   const estado: EstadoRobo = cliente.robo?.ficha ? cliente.robo : novoEstado()
+
+  // Sim ou nao solto mandado antes de a familia ver a pergunta nova ("não" e,
+  // 6 s depois, "nenhuma"): nao responde a ela. Fica lido, sem resposta.
+  const { data: ultimaDoRobo } = await banco.from('mensagens').select('em').eq('cliente_id', cliente.id).eq('de', 'robo').order('em', { ascending: false }).limit(1).maybeSingle()
+  if (!estado.pausado && respostaAtrasada(comEntrada.map((p) => ({ em: p.em, texto: p.entrada })), ultimaDoRobo?.em)) {
+    await banco.from('clientes').update({ nao_lidas: (cliente.nao_lidas ?? 0) + comEntrada.length, ultima_do_cliente_em: em.toISOString() }).eq('id', cliente.id)
+    await banco.from('mensagens').update({ robo_leu_em: new Date().toISOString() }).in('id', pendentes.map((p) => p.id))
+    await evento(cliente.id, 'robo', `"${entrada.slice(0, 60).replace(/\n/g, ' / ')}" chegou antes da pergunta nova: o robô não usou como resposta`)
+    return
+  }
+
   const agenda = await agendaDaVez(cliente.id)
   let r = responder(estado, entrada, em, agenda)
 

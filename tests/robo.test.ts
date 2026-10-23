@@ -23,6 +23,8 @@ import {
   repetirPergunta,
   contornar,
   ponteSegura,
+  soSimOuNao,
+  respostaAtrasada,
   type AgendaDaVez,
   type EstadoRobo,
   type Sinal,
@@ -859,6 +861,21 @@ caso('IA contorna (Sabrina 23/10): frase dela + a pergunta, sem "nao entendi"; f
   // Resposta de verdade zera os contornos.
   assert.equal(conversa(['não recebe nada'], SEGUNDA_10H, duas.estado).estado.contornos, 0)
   assert.equal(ponteSegura('Sem problema, não precisa ser exato.'), 'Sem problema, não precisa ser exato.')
+})
+
+caso('Sabrina 23/10: "nenhuma" mandado antes da pergunta nova nao responde a ela; conteudo atrasado vale', () => {
+  for (const t of ['nenhuma', 'Não', 'não, nenhuma', 'ok', 'Isso mesmo!', 'naum', 'nada'])
+    assert.ok(soSimOuNao(t), t)
+  for (const t of ['5 anos', 'só eu e ele', 'não, mas meu marido recebe auxílio', 'sim, de 2024', '', '👍'])
+    assert.ok(!soSimOuNao(t), t)
+  const pergunta = '2026-10-23T12:32:36.500Z'
+  assert.ok(respostaAtrasada([{ em: '2026-10-23T12:32:32Z', texto: 'nenhuma' }], pergunta))
+  // Depois de ver a pergunta, "não" e resposta dela.
+  assert.ok(!respostaAtrasada([{ em: '2026-10-23T12:32:45Z', texto: 'não' }], pergunta))
+  // Atrasada mas com conteudo: vale.
+  assert.ok(!respostaAtrasada([{ em: '2026-10-23T12:32:32Z', texto: '5 anos' }], pergunta))
+  assert.ok(!respostaAtrasada([{ em: '2026-10-23T12:32:32Z', texto: 'nenhuma' }, { em: '2026-10-23T12:32:40Z', texto: 'nenhuma' }], pergunta))
+  assert.ok(!respostaAtrasada([{ em: '2026-10-23T12:32:32Z', texto: 'nenhuma' }], null))
 })
 
 console.log(`robo: ${total} conversas ok`)

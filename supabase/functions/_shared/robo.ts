@@ -275,6 +275,27 @@ export function repetirPergunta(estado: EstadoRobo, agora: Date = new Date()): {
   return { texto: textoDaPergunta(p, estado.ficha, agora), estado: { ...estado, ultimaPergunta: p, voltarPara: null, naoEntendeu: 0, contornos: 0 } }
 }
 
+// Sim ou nao solto responde qualquer pergunta: so vale para a que a familia viu.
+const PALAVRAS_SOLTAS = new Set('nao naum n nn sim s ss nenhum nenhuma nada ninguem nunca ok okay isso mesmo certo exato aham uhum tambem'.split(' '))
+
+/** "nenhuma", "não", "ok", "isso mesmo": sem conteudo proprio, so confirma ou nega. */
+export function soSimOuNao(texto: string): boolean {
+  const palavras = normalizar(texto).replace(/[^a-z ]/g, ' ').trim().split(/\s+/).filter(Boolean)
+  return palavras.length > 0 && palavras.length <= 3 && palavras.every((p) => PALAVRAS_SOLTAS.has(p))
+}
+
+/**
+ * A familia respondeu em duas partes ("não" e, 6 s depois, "nenhuma") e a
+ * segunda saiu antes de ela ver a pergunta nova do robo (Sabrina, 23/10/2026).
+ * Sim ou nao solto ali nao responde a pergunta nova: o robo nao usa. Mensagem
+ * com conteudo ("5 anos") vale normalmente, mesmo atrasada.
+ */
+export function respostaAtrasada(mensagens: { em: string; texto: string }[], ultimaDoRoboEm: string | null | undefined): boolean {
+  if (!ultimaDoRoboEm || !mensagens.length) return false
+  const robo = new Date(ultimaDoRoboEm).getTime()
+  return mensagens.every((m) => new Date(m.em).getTime() < robo && soSimOuNao(m.texto))
+}
+
 // ---------------------------------------------------------------------------
 // Texto
 // ---------------------------------------------------------------------------
