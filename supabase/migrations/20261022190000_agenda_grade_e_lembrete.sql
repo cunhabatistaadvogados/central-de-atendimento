@@ -31,4 +31,7 @@ commit;
 -- create extension if not exists pg_cron;
 -- create extension if not exists pg_net;
 -- select cron.schedule('lembrete-reuniao', '*/10 * * * *',
---   $$ select net.http_post(url := 'https://wizoolakyttjrahpbgec.supabase.co/functions/v1/lembrete-reuniao', body := '{}'::jsonb) $$);
+--   $$ select net.http_post(url := 'https://wizoolakyttjrahpbgec.supabase.co/functions/v1/lembrete-reuniao',
+--     headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer <chave publishable>', 'apikey', '<chave publishable>'),
+--     body := '{}'::jsonb) $$);
+-- Aplicado em 22/10/2026 pelo painel (job "lembrete-reuniao" ativo).
