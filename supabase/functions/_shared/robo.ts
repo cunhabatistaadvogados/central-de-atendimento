@@ -268,8 +268,10 @@ export function contornar(estadoAnterior: EstadoRobo, ponte: string, agora: Date
  * a equipe usa "Confirmar reuniao". Null quando nao ha pergunta para repetir.
  */
 export function repetirPergunta(estado: EstadoRobo, agora: Date = new Date()): { texto: string; estado: EstadoRobo } | null {
-  const p = perguntaPendente(estado)
-  if (!p) return null
+  // Religado depois de ir para a equipe nao ha pergunta pendente: vale a proxima
+  // que falta na ficha (Sabrina, 23/10/2026).
+  const p = perguntaPendente(estado) ?? (estado.pausado || estado.ultimaPergunta ? null : proximaPergunta(estado.ficha))
+  if (!p || p === 'horario') return null
   return { texto: textoDaPergunta(p, estado.ficha, agora), estado: { ...estado, ultimaPergunta: p, voltarPara: null, naoEntendeu: 0, contornos: 0 } }
 }
 

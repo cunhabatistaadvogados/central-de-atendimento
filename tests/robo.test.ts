@@ -830,6 +830,8 @@ caso('botao "Repetir pergunta": manda a pergunta que ficou, zera o "nao entendi"
   assert.equal(repetirPergunta({ ...c.estado, pausado: true }), null)
   assert.equal(repetirPergunta({ ...c.estado, ultimaPergunta: 'horario' }), null)
   assert.equal(repetirPergunta({ ...c.estado, ultimaPergunta: 'retomar', voltarPara: 'casa' })!.estado.ultimaPergunta, 'casa')
+  // Religado depois de ir para a equipe (sem pergunta pendente): repete a proxima que falta.
+  assert.equal(repetirPergunta({ ...c.estado, ultimaPergunta: null })!.texto, r.texto)
 })
 
 caso('IA contorna (Sabrina 23/10): frase dela + a pergunta, sem "nao entendi"; frase perigosa vira "Entendi."; limite de contornos', () => {
