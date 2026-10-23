@@ -66,11 +66,9 @@ Deno.serve(async (req) => {
     const subida = await d4(`/documents/${COFRE_CBAA}/uploadbinary`, { base64_binary_file: pdf_base64, mime_type: 'application/pdf', name: nome ?? 'TESTE Central CB&' })
     const uuid = (subida.dados as Record<string, string>)?.uuid
     if (!uuid) return json({ etapa: 'upload', ...subida, ok: false })
-    // 2. um signatario so, com confirmacao por WhatsApp. Sem e-mail, o proprio
-    // numero vai no campo email (a D4Sign grava assim) e o skipemail do
-    // signatario corta so o e-mail dele.
+    // 2. um signatario so, com confirmacao por WhatsApp, igual a familia na
+    // funcao contrato-d4sign (sem e-mail, a D4Sign grava o numero no lugar).
     const signatario: Record<string, string> = {
-      email: email || whatsapp,
       act: '1',
       foreign: '0',
       certificadoicpbr: '0',
@@ -78,8 +76,8 @@ Deno.serve(async (req) => {
       whatsapp_number: whatsapp,
       embed_methodauth: 'whats',
       embed_smsnumber: whatsapp,
-      skipemail: email ? '0' : '1',
     }
+    if (email) signatario.email = email
     const lista = await d4(`/documents/${uuid}/createlist`, { signers: [signatario] })
     if (!lista.ok) return json({ etapa: 'signatarios', documento: uuid, ...lista, ok: false })
     // 3. envia para assinatura. skip_email '1' e para assinatura embutida no
