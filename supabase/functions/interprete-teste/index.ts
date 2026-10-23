@@ -1,9 +1,10 @@
 // Teste do interprete (22/10/2026): recebe {casos: [{pergunta, resposta}]} e
-// devolve o que o Claude entendeu e o que o robo faria com isso. So a equipe
+// devolve o que o Claude entendeu e o que o robo faria com isso. Cada caso pode
+// trazer "antes" (as mensagens anteriores, 23/10/2026). So a equipe
 // chama. Publicado pelo painel como arquivo unico (interprete.ts + robo.ts
 // colados no lugar dos imports).
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { interpretar, MODELO_DO_INTERPRETE } from '../_shared/interprete.ts'
+import { interpretar, MODELO_DO_INTERPRETE, type Fala } from '../_shared/interprete.ts'
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -25,9 +26,9 @@ Deno.serve(async (req) => {
 
   const { casos = [] } = await req.json().catch(() => ({}))
   const resultados = []
-  for (const c of (casos as { pergunta: string; resposta: string }[]).slice(0, 10)) {
+  for (const c of (casos as { pergunta: string; resposta: string; antes?: Fala[] }[]).slice(0, 10)) {
     const inicio = Date.now()
-    const i = await interpretar(c.pergunta, c.resposta)
+    const i = await interpretar(c.pergunta, c.resposta, c.antes ?? [])
     resultados.push({ ...c, ...i, ms: Date.now() - inicio })
   }
   return json({ modelo: MODELO_DO_INTERPRETE, resultados })

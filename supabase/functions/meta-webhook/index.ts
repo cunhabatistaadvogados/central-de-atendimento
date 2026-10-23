@@ -8,9 +8,9 @@
 // Segredos: WHATSAPP_VERIFY_TOKEN, META_APP_SECRET, WHATSAPP_ACCESS_TOKEN,
 // WHATSAPP_PHONE_NUMBER_ID. SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY ja vem do ambiente.
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { contratoComParteFixa, novoEstado, responder, type AgendaDaVez, type EstadoRobo, type Etapa, type GradeDaAgenda } from '../_shared/robo.ts'
+import { anotarComplemento, contratoComParteFixa, novoEstado, responder, type AgendaDaVez, type EstadoRobo, type Etapa, type GradeDaAgenda } from '../_shared/robo.ts'
 import { assinaturaValida, baixarMidia, enviarTexto } from '../_shared/whatsapp.ts'
-import { interpretar } from '../_shared/interprete.ts'
+import { interpretar, type Fala } from '../_shared/interprete.ts'
 
 const ORDEM: Etapa[] = ['novo', 'qualificacao', 'qualificado', 'reuniao', 'contrato', 'contratado']
 
@@ -164,6 +164,25 @@ async function ultimaFalaDoRobo(clienteId: string): Promise<string | null> {
   return data?.texto ?? null
 }
 
+// O fim da conversa antes da mensagem que chegou (mais antiga primeiro), para o
+// interprete ver se a familia ainda completa uma pergunta anterior. O nome da
+// familia vai trocado por [nome] (LGPD).
+async function falasRecentes(clienteId: string, semId: string, nome: string | undefined, pergunta: string): Promise<Fala[]> {
+  const { data } = await banco.from('mensagens').select('id, de, texto').eq('cliente_id', clienteId).neq('id', semId).order('em', { ascending: false }).limit(6)
+  const falas: Fala[] = (data ?? []).reverse().map((m) => ({ de: m.de === 'cliente' ? 'familia' : 'escritorio', texto: semNome(m.texto ?? '', nome) }))
+  // A ultima pergunta ja vai a parte: nao repete.
+  const ultima = falas.at(-1)
+  if (ultima?.de === 'escritorio' && ultima.texto === semNome(pergunta, nome)) falas.pop()
+  return falas
+}
+
+function semNome(texto: string, nome: string | undefined): string {
+  const primeiro = (nome ?? '').trim().split(/\s+/)[0]
+  if (!primeiro || primeiro.length < 3) return texto
+  const escapado = primeiro.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return texto.replace(new RegExp(`(?<![\\p{L}])${escapado}(?![\\p{L}])`, 'giu'), '[nome]')
+}
+
 async function evento(clienteId: string, tipo: string, texto: string) {
   await banco.from('eventos').insert({ cliente_id: clienteId, tipo, texto })
 }
@@ -246,12 +265,19 @@ async function processar(m: MensagemMeta) {
   // As regras nao entenderam: o interprete (Claude) reescreve a resposta e o
   // robo tenta de novo. So vale se a segunda volta entender; senao fica como
   // antes. Audio e arquivo nao passam (nao ha texto para interpretar).
+  // Se a frase completa uma pergunta anterior, o robo anota e repete a atual.
   if (naoEntendeu(estado, r) && !/^\[(áudio|arquivo) recebido\]$/.test(entrada)) {
     const pergunta = await ultimaFalaDoRobo(cliente.id)
     if (pergunta) {
-      const i = await interpretar(pergunta, entrada)
+      const nome = estado.ficha?.nome
+      const antes = await falasRecentes(cliente.id, gravada.data.id, nome, pergunta)
+      const i = await interpretar(semNome(pergunta, nome), entrada, antes)
       if (i.erro) console.warn('[meta-webhook] interprete:', i.erro)
-      if (i.entendeu) {
+      const complemento = i.sobreAnterior ? anotarComplemento(estado, i.resposta, em) : null
+      if (complemento) {
+        r = complemento
+        await evento(cliente.id, 'robo', `Intérprete: "${entrada.slice(0, 120)}" completa a resposta anterior: ${i.resposta}`)
+      } else if (i.entendeu && !i.sobreAnterior) {
         const segunda = responder(estado, i.resposta, em, agenda)
         if (!naoEntendeu(estado, segunda)) {
           r = segunda

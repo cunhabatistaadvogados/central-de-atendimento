@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { Etapa } from '@motor/robo'
+import { religar, type Etapa } from '@motor/robo'
 import { enviarComoEquipe, id, mensagemDaReuniao, novoCliente, rascunhoDoContrato, receberDoCliente } from './atendimento'
 import { baseDeDemonstracao } from './dados-demo'
 import { etapa as infoEtapa } from './escritorio'
@@ -73,7 +73,7 @@ function transformacoes(mudar: (cid: string, fn: (c: Cliente) => Cliente) => voi
     religarRobo: (cid: string) =>
       mudar(cid, (c) => ({
         ...c,
-        robo: { ...c.robo, pausado: false, motivoPausa: undefined, encaminhado: false },
+        robo: religar(c.robo),
         eventos: [...c.eventos, ev('equipe', 'Robô religado pela equipe')],
       })),
     moverEtapa: (cid: string, etapa: Etapa, autor: string, motivoPerda?: string) =>

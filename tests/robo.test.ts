@@ -18,6 +18,8 @@ import {
   mensagemDeRetomada,
   perguntaParaRetomar,
   proximaRetomada,
+  religar,
+  anotarComplemento,
   type AgendaDaVez,
   type EstadoRobo,
   type Sinal,
@@ -773,6 +775,43 @@ caso('F09: "n. e ai tem direito?" responde a pergunta feita e anota a duvida', (
   assert.equal(c.ficha.beneficioProprio, 'nao')
   assert.ok(c.ultima.startsWith(TEXTO_JURIDICO))
   assert.doesNotMatch(c.ultima, /já recebe algum benefício/)
+})
+
+caso('teste do Lucas 21/10: "estamos todos desempregados" na pergunta do beneficio e "nao recebe"', () => {
+  const base = ['preciso de Loas para meu Pai', '74', 'Lucas', 'só eu e ele', 'sim, atualizado', 'a renda dá 1 salário mínimo']
+  const c = conversa([...base, 'todos estão desempregados no momento'])
+  assert.equal(c.ficha.beneficioProprio, 'nao')
+  assert.equal(c.estado.naoEntendeu, 0)
+  assert.ok(!encaminhou(c))
+  // Com benefício dito junto, não vira "não": quem recebe seguro-desemprego recebe algo.
+  assert.notEqual(conversa([...base, 'ele tá desempregado mas recebe auxílio']).ficha.beneficioProprio, 'nao')
+  const casa = conversa([...ATE_CASA, 'somos 3 e a renda é 900', 'não', 'estamos todos desempregados'])
+  assert.equal(casa.ficha.outrosBeneficios, 'nao')
+})
+
+caso('numero do Lucas 23/10: religado, continua de onde parou; religar zera o "nao entendi"', () => {
+  const antes = conversa(['preciso de Loas para meu Pai', '74', 'Lucas', 'só eu e ele', 'sim, atualizado', 'a renda dá 1 salário mínimo', 'blablabla', 'xyz xyz'])
+  assert.ok(encaminhou(antes, /não entendeu/))
+  const depois = conversa(['Olá! Quero saber sobre o BPC/LOAS do idoso.'], SEGUNDA_10H, religar(antes.estado))
+  assert.ok(!encaminhou(depois))
+  assert.equal(depois.ultima, 'Vamos continuar de onde paramos. Ele já recebe aposentadoria, pensão ou outro benefício do INSS?')
+  // Com pergunta pendente, a 1a frase sem sentido depois de religar pede para explicar, nao vai para a equipe.
+  const pendente = conversa(['xyz xyz'], SEGUNDA_10H, religar({ ...antes.estado, ultimaPergunta: 'beneficio_proprio' }))
+  assert.ok(!encaminhou(pendente))
+  assert.match(pendente.ultima, /não entendi/)
+})
+
+caso('Sabrina 23/10: "Somente na proxima" completa a pergunta do CRAS; anota e repete a pergunta da casa', () => {
+  const c = conversa(['meu filho tem laudo de autismo de 2025', 'Sabrina, ele tem 3 anos', 'ele faz terapia', 'plano', 'não temos', 'Não'])
+  assert.equal(c.estado.ultimaPergunta, 'casa')
+  const r = anotarComplemento(c.estado, 'só consegue ir ao CRAS na próxima semana', SEGUNDA_10H)!
+  assert.equal(r.respostas[0], `Entendi, anotado. ${c.ultima.replace(/^Combinado\. /, '')}`)
+  assert.ok(r.estado.ficha.anotacoes?.includes('Completou a resposta anterior: só consegue ir ao CRAS na próxima semana'))
+  assert.equal(r.estado.naoEntendeu, 0)
+  assert.equal(r.estado.ultimaPergunta, 'casa')
+  // Sem pergunta para repetir (pausado ou esperando horario), fica o caminho normal.
+  assert.equal(anotarComplemento({ ...c.estado, pausado: true }, 'x'), null)
+  assert.equal(anotarComplemento({ ...c.estado, ultimaPergunta: 'horario' }, 'x'), null)
 })
 
 console.log(`robo: ${total} conversas ok`)

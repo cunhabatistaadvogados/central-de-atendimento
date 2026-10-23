@@ -190,6 +190,32 @@ export function novoEstado(): EstadoRobo {
   }
 }
 
+/**
+ * Robo religado pela equipe. Zera o "nao entendi": senao a primeira mensagem
+ * que ele nao entender depois de religado ja vai direto para a equipe (numero
+ * do Lucas, 23/10/2026: contador ficou em 2 desde o dia 21).
+ */
+export function religar(estado: EstadoRobo): EstadoRobo {
+  return { ...estado, pausado: false, motivoPausa: undefined, encaminhado: false, naoEntendeu: 0 }
+}
+
+/**
+ * A familia ainda respondia a pergunta anterior: "Da para ir ao CRAS essa
+ * semana?" "Nao" "Quem mora com ele?" "Somente na proxima" (Sabrina,
+ * 23/10/2026). Quem percebe e o interprete, que ve as ultimas mensagens; o
+ * robo anota para a equipe e repete a pergunta atual, sem contar "nao entendi".
+ * Devolve null quando nao ha pergunta simples para repetir.
+ */
+export function anotarComplemento(estadoAnterior: EstadoRobo, complemento: string, agora: Date = new Date()): Resultado | null {
+  const p = estadoAnterior.ultimaPergunta
+  if (estadoAnterior.pausado || !p || p === 'retomar' || p === 'horario' || !complemento.trim()) return null
+  const nota = `Completou a resposta anterior: ${complemento.trim().slice(0, 160)}`
+  const anotacoes = estadoAnterior.ficha.anotacoes ?? []
+  const ficha: Ficha = { ...estadoAnterior.ficha, anotacoes: anotacoes.includes(nota) ? anotacoes : [...anotacoes, nota] }
+  const estado: EstadoRobo = { ...estadoAnterior, ficha, mensagensDoCliente: estadoAnterior.mensagensDoCliente + 1 }
+  return { respostas: [`Entendi, anotado. ${textoDaPergunta(p, ficha, agora)}`], estado, sinais: [] }
+}
+
 // ---------------------------------------------------------------------------
 // Texto
 // ---------------------------------------------------------------------------
@@ -636,6 +662,9 @@ function contarCasa(texto: string, perguntou: boolean, f: Ficha): number | undef
 
 const QUAL_BENEFICIO = /\b(aposentadoria|aposentad[oa]s?|pensao( por morte)?|pensionista|auxilio[- ]doenca|auxilio[- ]acidente|auxilio|beneficio por incapacidade|bpc|loas|seguro[- ]desemprego)\b/
 
+// "Estamos todos desempregados" na pergunta do beneficio quer dizer que nao recebe (teste do Lucas, 21/10/2026).
+const SEM_TRABALHO = /\b(desempregad[oa]s?|sem (emprego|trabalho|trabalhar)|ninguem trabalha|vivemos de bicos?|(faz|faco|fazemos|fazendo) bicos?)\b/
+
 /** O pronome ou o parente que aponta a pessoa do beneficio na frase. */
 function refBeneficiario(f: Ficha): RegExp {
   if (f.para === 'proprio') return /\b(eu|recebo|sou aposentad[oa]|sou pensionista|ganho)\b/
@@ -669,6 +698,7 @@ function lerBeneficioProprio(t: string, f: Ficha, perguntou: boolean): { proprio
   if (perguntou) {
     if (NAO_SEI.test(t)) return undefined
     if (ehNao(t) || /\b(nao recebe|nenhum|ninguem|nada|so (o )?bolsa familia)\b/.test(t)) return { proprio: 'nao', outro: deOutro && qual ? qual : undefined }
+    if (SEM_TRABALHO.test(t) && !qual) return { proprio: 'nao' }
     // Bolsa Familia pode ser recebido junto com o BPC: nao e impedimento.
     if (/\bbolsa familia\b/.test(t) && !qual) return { proprio: 'nao' }
     if (deOutro && !doBenef) return { proprio: 'nao', outro: qual ?? 'benefício' }
@@ -884,7 +914,7 @@ export function lerMensagem(original: string, ficha: Ficha, pergunta: Pergunta |
     }
   }
   if (perguntou('outros_beneficios')) {
-    if (ehNao(t) || /\b(ninguem|nenhum|so (o )?bolsa familia)\b/.test(t)) nova.outrosBeneficios = 'nao'
+    if (ehNao(t) || /\b(ninguem|nenhum|so (o )?bolsa familia)\b/.test(t) || (SEM_TRABALHO.test(t) && !QUAL_BENEFICIO.test(t))) nova.outrosBeneficios = 'nao'
     else if (QUAL_BENEFICIO.test(t) || ehSim(t)) {
       nova.outrosBeneficios = 'sim'
       nova.outrosBeneficiosTexto = livre ? original.trim().slice(0, 120) : t.match(QUAL_BENEFICIO)?.[1]
@@ -2209,6 +2239,9 @@ function conversar(estadoAnterior: EstadoRobo, mensagem: string, agora: Date): R
   // Nada aproveitavel numa resposta que precisava de conteudo.
   const soConfirma = ['cadunico_combinado', 'fase_medica_recusou'].includes(perguntaFeita ?? '')
   if (!primeira && !aprendeuAlgo && !soConfirma) {
+    // Sem pergunta pendente (religado depois de ir para a equipe): segue de onde
+    // parou em vez de "nao entendi" (numero do Lucas, 23/10/2026).
+    if (perguntaFeita === null) return seguir('Vamos continuar de onde paramos.')
     if (perguntaFeita === 'renda' && estado.naoEntendeu === 0) {
       estado.naoEntendeu = 1
       estado.ultimaPergunta = 'renda_simples'
