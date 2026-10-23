@@ -8,7 +8,7 @@
 // Segredos: WHATSAPP_VERIFY_TOKEN, META_APP_SECRET, WHATSAPP_ACCESS_TOKEN,
 // WHATSAPP_PHONE_NUMBER_ID. SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY ja vem do ambiente.
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { anotarComplemento, contratoComParteFixa, novoEstado, responder, type AgendaDaVez, type EstadoRobo, type Etapa, type GradeDaAgenda } from '../_shared/robo.ts'
+import { anotarComplemento, contornar, contratoComParteFixa, novoEstado, responder, type AgendaDaVez, type EstadoRobo, type Etapa, type GradeDaAgenda } from '../_shared/robo.ts'
 import { assinaturaValida, baixarMidia, enviarTexto } from '../_shared/whatsapp.ts'
 import { interpretar, type Fala } from '../_shared/interprete.ts'
 
@@ -164,12 +164,15 @@ async function ultimaFalaDoRobo(clienteId: string): Promise<string | null> {
   return data?.texto ?? null
 }
 
-// O fim da conversa antes da mensagem que chegou (mais antiga primeiro), para o
-// interprete ver se a familia ainda completa uma pergunta anterior. O nome da
-// familia vai trocado por [nome] (LGPD).
-async function falasRecentes(clienteId: string, semId: string, nome: string | undefined, pergunta: string): Promise<Fala[]> {
-  const { data } = await banco.from('mensagens').select('id, de, texto').eq('cliente_id', clienteId).neq('id', semId).order('em', { ascending: false }).limit(6)
-  const falas: Fala[] = (data ?? []).reverse().map((m) => ({ de: m.de === 'cliente' ? 'familia' : 'escritorio', texto: semNome(m.texto ?? '', nome) }))
+// O fim da conversa antes das mensagens que chegaram (mais antiga primeiro),
+// para o interprete ver o contexto. O nome da familia vai trocado por [nome] (LGPD).
+async function falasRecentes(clienteId: string, semIds: Set<string>, nome: string | undefined, pergunta: string): Promise<Fala[]> {
+  const { data } = await banco.from('mensagens').select('id, de, texto').eq('cliente_id', clienteId).order('em', { ascending: false }).limit(12)
+  const falas: Fala[] = (data ?? [])
+    .filter((m) => !semIds.has(m.id))
+    .slice(0, 6)
+    .reverse()
+    .map((m) => ({ de: m.de === 'cliente' ? 'familia' : 'escritorio', texto: semNome(m.texto ?? '', nome) }))
   // A ultima pergunta ja vai a parte: nao repete.
   const ultima = falas.at(-1)
   if (ultima?.de === 'escritorio' && ultima.texto === semNome(pergunta, nome)) falas.pop()
@@ -258,32 +261,146 @@ async function processar(m: MensagemMeta) {
     return
   }
 
+  // Uma rajada de mensagens recebe uma resposta so, e uma conversa roda o robo
+  // uma vez por vez: em 23/10/2026 a Sabrina mandou 3 mensagens em 14 s, cada
+  // uma rodou o robo ao mesmo tempo com o estado velho, e ele seguiu
+  // perguntando depois de passar para a equipe. Quem chegou por ultimo
+  // responde por todas; o 200 vai antes para a Meta (EdgeRuntime.waitUntil).
+  const tarefa = responderNaVez(cliente.id, m.from, gravada.data.id, entrada).catch((e) => console.error('[meta-webhook] robo', m.id, e))
+  const runtime = (globalThis as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime
+  if (runtime) runtime.waitUntil(tarefa)
+  else await tarefa
+}
+
+// Espera para juntar a rajada ("mais ou menos" / "eu trabalho clt" / "mas o
+// liquido e menos" e um pensamento so).
+const AGRUPAR_MS = 4000
+const esperar = (ms: number) => new Promise((ok) => setTimeout(ok, ms))
+
+interface Pendente {
+  id: string
+  em: string
+  entrada: string
+}
+
+// O que o robo le de uma mensagem gravada (o mesmo de conteudoDaMensagem).
+function entradaDaLinha(l: { texto: string | null; midia_tipo: string | null }): string {
+  const t = (l.texto ?? '').trim()
+  if (l.midia_tipo === 'figurinha') return ''
+  if (l.midia_tipo === 'audio') return '[áudio recebido]'
+  if (l.midia_tipo) return '[arquivo recebido]'
+  if (!t || /^Reagiu com /.test(t)) return ''
+  if (/^(📍 Localização|👤 Contato:|Mensagem que a API do WhatsApp não mostra)/u.test(t)) return '[arquivo recebido]'
+  return t
+}
+
+// Mensagens da familia que o robo ainda nao leu (reacao e figurinha entram
+// para serem marcadas como lidas, mas sem entrada).
+async function pendentesDoRobo(clienteId: string, msgId: string, entradaDaMsg: string): Promise<Pendente[]> {
+  const { data, error } = await banco
+    .from('mensagens')
+    .select('id, texto, midia_tipo, em')
+    .eq('cliente_id', clienteId)
+    .eq('de', 'cliente')
+    .is('robo_leu_em', null)
+    .gte('em', new Date(Date.now() - 30 * 60000).toISOString())
+    .order('em')
+    .order('id')
+    .limit(20)
+  if (error) {
+    // Sem a coluna (migration nao aplicada): responde so a mensagem dela, como antes.
+    console.warn('[meta-webhook] pendentes:', error.message)
+    return [{ id: msgId, em: new Date().toISOString(), entrada: entradaDaMsg }]
+  }
+  // A figurinha do primeiro contato vale "oi": a entrada dela vem de quem chamou.
+  return (data ?? []).map((l) => ({ id: l.id, em: l.em, entrada: l.id === msgId ? entradaDaMsg : entradaDaLinha(l) }))
+}
+
+// Trava da conversa: update condicional (atomico no Postgres). Vence em 60 s
+// se a rodada morrer no meio.
+async function pegarAVez(clienteId: string): Promise<boolean> {
+  for (let i = 0; i < 50; i++) {
+    const agora = new Date()
+    const { data, error } = await banco
+      .from('clientes')
+      .update({ robo_ocupado_ate: new Date(agora.getTime() + 60000).toISOString() })
+      .eq('id', clienteId)
+      .or(`robo_ocupado_ate.is.null,robo_ocupado_ate.lt.${agora.toISOString()}`)
+      .select('id')
+    if (error) {
+      console.warn('[meta-webhook] trava:', error.message)
+      return true
+    }
+    if (data?.length) return true
+    await esperar(1000)
+  }
+  return false
+}
+
+async function responderNaVez(clienteId: string, telefone: string, msgId: string, entradaDaMsg: string) {
+  await esperar(AGRUPAR_MS)
+  // Chegou outra mensagem depois desta: a rodada e dela.
+  const ultimaComEntrada = (p: Pendente[]) => p.filter((x) => x.entrada).at(-1)?.id
+  if (ultimaComEntrada(await pendentesDoRobo(clienteId, msgId, entradaDaMsg)) !== msgId) return
+  if (!(await pegarAVez(clienteId))) {
+    await evento(clienteId, 'sistema', 'O robô ficou ocupado demais e não respondeu: confira a conversa.')
+    return
+  }
+  try {
+    const pendentes = await pendentesDoRobo(clienteId, msgId, entradaDaMsg)
+    if (ultimaComEntrada(pendentes) !== msgId) return
+    const { data: cliente, error } = await banco.from('clientes').select('*').eq('id', clienteId).single()
+    if (error || !cliente) throw new Error(`cliente ${clienteId}: ${error?.message}`)
+    await rodarORobo(cliente, telefone, pendentes)
+  } finally {
+    await banco.from('clientes').update({ robo_ocupado_ate: null }).eq('id', clienteId)
+  }
+}
+
+// deno-lint-ignore no-explicit-any
+async function rodarORobo(cliente: any, telefone: string, pendentes: Pendente[]) {
+  const comEntrada = pendentes.filter((p) => p.entrada)
+  // Texto junto com foto/audio: o robo le o texto (a equipe ve o arquivo).
+  const textos = comEntrada.map((p) => p.entrada).filter((t) => !/^\[(áudio|arquivo) recebido\]$/.test(t))
+  const entrada = textos.length ? textos.join('\n') : comEntrada.at(-1)!.entrada
+  const em = new Date(comEntrada.at(-1)!.em)
+
   const estado: EstadoRobo = cliente.robo?.ficha ? cliente.robo : novoEstado()
   const agenda = await agendaDaVez(cliente.id)
   let r = responder(estado, entrada, em, agenda)
 
-  // As regras nao entenderam: o interprete (Claude) reescreve a resposta e o
-  // robo tenta de novo. So vale se a segunda volta entender; senao fica como
-  // antes. Audio e arquivo nao passam (nao ha texto para interpretar).
-  // Se a frase completa uma pergunta anterior, o robo anota e repete a atual.
+  // As regras nao entenderam: o interprete (Claude) le o fim da conversa e
+  // escolhe: reescrever a resposta (o robo roda de novo), anotar o que
+  // completa uma pergunta anterior, ou contornar com uma frase curta e repetir
+  // a pergunta. So se nem ele entender (ou ja tiver contornado demais) fica o
+  // "nao entendi". Audio e arquivo nao passam (nao ha texto).
   if (naoEntendeu(estado, r) && !/^\[(áudio|arquivo) recebido\]$/.test(entrada)) {
     const pergunta = await ultimaFalaDoRobo(cliente.id)
     if (pergunta) {
       const nome = estado.ficha?.nome
-      const antes = await falasRecentes(cliente.id, gravada.data.id, nome, pergunta)
+      const antes = await falasRecentes(cliente.id, new Set(pendentes.map((p) => p.id)), nome, pergunta)
       const i = await interpretar(semNome(pergunta, nome), entrada, antes)
       if (i.erro) console.warn('[meta-webhook] interprete:', i.erro)
-      const complemento = i.sobreAnterior ? anotarComplemento(estado, i.resposta, em) : null
-      if (complemento) {
-        r = complemento
-        await evento(cliente.id, 'robo', `Intérprete: "${entrada.slice(0, 120)}" completa a resposta anterior: ${i.resposta}`)
-      } else if (i.entendeu && !i.sobreAnterior) {
+      const curta = entrada.slice(0, 160).replace(/\n/g, ' / ')
+      let feito: typeof r | null = null
+      if (i.tipo === 'resposta') {
         const segunda = responder(estado, i.resposta, em, agenda)
         if (!naoEntendeu(estado, segunda)) {
-          r = segunda
-          await evento(cliente.id, 'robo', `Intérprete: "${entrada.slice(0, 120)}" entendido como "${i.resposta}"`)
+          feito = segunda
+          await evento(cliente.id, 'robo', `Intérprete: "${curta}" entendido como "${i.resposta}"`)
+        } else {
+          // Ela achou que era resposta, mas as regras nao leram: segue a conversa.
+          feito = contornar(estado, '', em)
+          if (feito) await evento(cliente.id, 'robo', `Intérprete: "${curta}" entendido como "${i.resposta}", mas o robô não leu; repetiu a pergunta`)
         }
+      } else if (i.tipo === 'complemento') {
+        feito = anotarComplemento(estado, i.resposta, em, i.ponte)
+        if (feito) await evento(cliente.id, 'robo', `Intérprete: "${curta}" completa a resposta anterior: ${i.resposta}`)
+      } else if (i.tipo === 'contornar') {
+        feito = contornar(estado, i.ponte, em, i.duvida || undefined)
+        if (feito) await evento(cliente.id, 'robo', `Intérprete contornou "${curta}" com: "${feito.respostas[0]}"`)
       }
+      if (feito) r = feito
     }
   }
 
@@ -341,13 +458,14 @@ async function processar(m: MensagemMeta) {
       reuniao,
       origem,
       motivo_perda: motivoPerda,
-      nao_lidas: (cliente.nao_lidas ?? 0) + 1,
+      nao_lidas: (cliente.nao_lidas ?? 0) + comEntrada.length,
       ultima_do_cliente_em: em.toISOString(),
     })
     .eq('id', cliente.id)
+  await banco.from('mensagens').update({ robo_leu_em: new Date().toISOString() }).in('id', pendentes.map((p) => p.id))
 
   for (const resposta of r.respostas) {
-    const envio = await enviarTexto(m.from, resposta)
+    const envio = await enviarTexto(telefone, resposta)
     await banco.from('mensagens').insert({
       cliente_id: cliente.id,
       de: 'robo',
@@ -360,7 +478,7 @@ async function processar(m: MensagemMeta) {
       // Robo nao conseguiu responder: para e chama a equipe em vez de sumir.
       await banco.from('clientes').update({ robo: { ...r.estado, pausado: true, encaminhado: true, motivoPausa: `Falha no envio: ${envio.erro}` } }).eq('id', cliente.id)
       await evento(cliente.id, 'sistema', `FALHA ao enviar resposta do robô: ${envio.erro}`)
-      console.error('[meta-webhook] envio falhou', m.from, envio.erro)
+      console.error('[meta-webhook] envio falhou', telefone, envio.erro)
       break
     }
   }

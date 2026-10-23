@@ -146,6 +146,8 @@ export interface EstadoRobo {
   voltarPara: Pergunta | null
   mensagensDoCliente: number
   naoEntendeu: number
+  /** vezes seguidas que a IA contornou sem a conversa andar (23/10/2026) */
+  contornos?: number
   /** robo parou: a equipe assumiu. So a equipe religa. */
   pausado: boolean
   motivoPausa?: string
@@ -196,7 +198,35 @@ export function novoEstado(): EstadoRobo {
  * do Lucas, 23/10/2026: contador ficou em 2 desde o dia 21).
  */
 export function religar(estado: EstadoRobo): EstadoRobo {
-  return { ...estado, pausado: false, motivoPausa: undefined, encaminhado: false, naoEntendeu: 0 }
+  return { ...estado, pausado: false, motivoPausa: undefined, encaminhado: false, naoEntendeu: 0, contornos: 0 }
+}
+
+/** A pergunta que o robo espera (a de antes do "Posso continuar?"); nada na escolha de horario. */
+function perguntaPendente(estado: EstadoRobo): Pergunta | null {
+  if (estado.pausado) return null
+  const p = estado.ultimaPergunta === 'retomar' ? estado.voltarPara : estado.ultimaPergunta
+  return !p || p === 'horario' ? null : p
+}
+
+/** Vezes seguidas que a IA contorna sem a conversa andar; depois volta o "nao entendi" e a equipe. */
+export const LIMITE_DE_CONTORNOS = 2
+
+// O que a IA escreve para a familia passa por aqui (23/10/2026): uma frase
+// curta, sem pergunta (a pergunta e do robo), sem numero, sem promessa, preco,
+// prazo, documento ou assunto juridico. Fora disso vale o "Entendi." do robo.
+const PONTE_PROIBIDA = /[?\d]|direito|garant|consegu|aprova|negad|indefer|r\$|reais|valor|pre[cç]o|honor|parcel|desconto|gr[aá]tis|prazo|document|\brg\b|\bcpf\b|laudo|envi[ae]|mand[ae]|advogad|processo|juiz|justi[cç]a/i
+export function ponteSegura(ponte: string | undefined, padrao = 'Entendi.'): string {
+  const p = (ponte ?? '').trim().replace(/\s+/g, ' ')
+  return p && p.length <= 120 && /[.!]$/.test(p) && !PONTE_PROIBIDA.test(p) ? p : padrao
+}
+
+/** A frase da IA e a pergunta que ficou, sem contar "nao entendi". */
+function voltarAPergunta(estadoAnterior: EstadoRobo, ponte: string, agora: Date, ficha: Ficha = estadoAnterior.ficha): Resultado | null {
+  const p = perguntaPendente(estadoAnterior)
+  const contornos = estadoAnterior.contornos ?? 0
+  if (!p || contornos >= LIMITE_DE_CONTORNOS) return null
+  const estado: EstadoRobo = { ...estadoAnterior, ficha, ultimaPergunta: p, voltarPara: null, mensagensDoCliente: estadoAnterior.mensagensDoCliente + 1, contornos: contornos + 1 }
+  return { respostas: [`${ponte} ${textoDaPergunta(p, ficha, agora)}`], estado, sinais: [] }
 }
 
 /**
@@ -206,14 +236,28 @@ export function religar(estado: EstadoRobo): EstadoRobo {
  * robo anota para a equipe e repete a pergunta atual, sem contar "nao entendi".
  * Devolve null quando nao ha pergunta simples para repetir.
  */
-export function anotarComplemento(estadoAnterior: EstadoRobo, complemento: string, agora: Date = new Date()): Resultado | null {
-  const p = estadoAnterior.ultimaPergunta
-  if (estadoAnterior.pausado || !p || p === 'retomar' || p === 'horario' || !complemento.trim()) return null
+export function anotarComplemento(estadoAnterior: EstadoRobo, complemento: string, agora: Date = new Date(), ponte?: string): Resultado | null {
+  if (!complemento.trim()) return null
   const nota = `Completou a resposta anterior: ${complemento.trim().slice(0, 160)}`
   const anotacoes = estadoAnterior.ficha.anotacoes ?? []
   const ficha: Ficha = { ...estadoAnterior.ficha, anotacoes: anotacoes.includes(nota) ? anotacoes : [...anotacoes, nota] }
-  const estado: EstadoRobo = { ...estadoAnterior, ficha, mensagensDoCliente: estadoAnterior.mensagensDoCliente + 1 }
-  return { respostas: [`Entendi, anotado. ${textoDaPergunta(p, ficha, agora)}`], estado, sinais: [] }
+  return voltarAPergunta(estadoAnterior, ponteSegura(ponte, 'Entendi, anotado.'), agora, ficha)
+}
+
+/**
+ * A mensagem nao responde a pergunta, mas da para seguir ("mais ou menos", "eu
+ * trabalho CLT", um desabafo): a IA escreve uma frase curta e o robo repete a
+ * pergunta (pedido do Edu, 23/10/2026: "antes de falar nao entendi, ela entra,
+ * contorna e o robo volta"). Duvida juridica usa o texto do escritorio e vira
+ * sinal de duvida. Null quando nao ha pergunta ou a IA ja contornou demais.
+ */
+export function contornar(estadoAnterior: EstadoRobo, ponte: string, agora: Date = new Date(), duvida?: string): Resultado | null {
+  if (!duvida) return voltarAPergunta(estadoAnterior, ponteSegura(ponte), agora)
+  const duvidas = estadoAnterior.ficha.duvidas ?? []
+  const ficha: Ficha = { ...estadoAnterior.ficha, duvidas: duvidas.includes(duvida) ? duvidas : [...duvidas, duvida] }
+  const r = voltarAPergunta(estadoAnterior, TEXTO_JURIDICO, agora, ficha)
+  r?.sinais.push({ tipo: 'duvida', texto: duvida })
+  return r
 }
 
 /**
@@ -224,10 +268,9 @@ export function anotarComplemento(estadoAnterior: EstadoRobo, complemento: strin
  * a equipe usa "Confirmar reuniao". Null quando nao ha pergunta para repetir.
  */
 export function repetirPergunta(estado: EstadoRobo, agora: Date = new Date()): { texto: string; estado: EstadoRobo } | null {
-  if (estado.pausado) return null
-  const p = estado.ultimaPergunta === 'retomar' ? estado.voltarPara : estado.ultimaPergunta
-  if (!p || p === 'horario') return null
-  return { texto: textoDaPergunta(p, estado.ficha, agora), estado: { ...estado, ultimaPergunta: p, voltarPara: null, naoEntendeu: 0 } }
+  const p = perguntaPendente(estado)
+  if (!p) return null
+  return { texto: textoDaPergunta(p, estado.ficha, agora), estado: { ...estado, ultimaPergunta: p, voltarPara: null, naoEntendeu: 0, contornos: 0 } }
 }
 
 // ---------------------------------------------------------------------------
@@ -677,6 +720,7 @@ function contarCasa(texto: string, perguntou: boolean, f: Ficha): number | undef
 const QUAL_BENEFICIO = /\b(aposentadoria|aposentad[oa]s?|pensao( por morte)?|pensionista|auxilio[- ]doenca|auxilio[- ]acidente|auxilio|beneficio por incapacidade|bpc|loas|seguro[- ]desemprego)\b/
 
 // "Estamos todos desempregados" na pergunta do beneficio quer dizer que nao recebe (teste do Lucas, 21/10/2026).
+const FALA_DE_SALARIO = /\b(salario|liquido|bruto|clt|carteira assinada|holerite|trabalh\w*|emprego|recebo (menos|mais))\b/
 const SEM_TRABALHO = /\b(desempregad[oa]s?|sem (emprego|trabalho|trabalhar)|ninguem trabalha|vivemos de bicos?|(faz|faco|fazemos|fazendo) bicos?)\b/
 
 /** O pronome ou o parente que aponta a pessoa do beneficio na frase. */
@@ -713,6 +757,10 @@ function lerBeneficioProprio(t: string, f: Ficha, perguntou: boolean): { proprio
     if (NAO_SEI.test(t)) return undefined
     if (ehNao(t) || /\b(nao recebe|nenhum|ninguem|nada|so (o )?bolsa familia)\b/.test(t)) return { proprio: 'nao', outro: deOutro && qual ? qual : undefined }
     if (SEM_TRABALHO.test(t) && !qual) return { proprio: 'nao' }
+    // Salario e trabalho nao respondem se ELE recebe beneficio: "mas liquido eu
+    // recebo menos" virava beneficio de outra pessoa (Sabrina, 23/10/2026). Fica
+    // para o interprete.
+    if (!qual && FALA_DE_SALARIO.test(t)) return undefined
     // Bolsa Familia pode ser recebido junto com o BPC: nao e impedimento.
     if (/\bbolsa familia\b/.test(t) && !qual) return { proprio: 'nao' }
     if (deOutro && !doBenef) return { proprio: 'nao', outro: qual ?? 'benefício' }
@@ -2268,6 +2316,7 @@ function conversar(estadoAnterior: EstadoRobo, mensagem: string, agora: Date): R
     return fim()
   }
   estado.naoEntendeu = 0
+  estado.contornos = 0
 
   const antesDaPergunta: string[] = [primeira ? '' : reconhecimento(antes, f, perguntaFeita)]
   if (f.biometria === 'nao' && antes.biometria !== 'nao') {

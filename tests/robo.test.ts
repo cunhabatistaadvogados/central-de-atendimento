@@ -21,6 +21,8 @@ import {
   religar,
   anotarComplemento,
   repetirPergunta,
+  contornar,
+  ponteSegura,
   type AgendaDaVez,
   type EstadoRobo,
   type Sinal,
@@ -828,6 +830,33 @@ caso('botao "Repetir pergunta": manda a pergunta que ficou, zera o "nao entendi"
   assert.equal(repetirPergunta({ ...c.estado, pausado: true }), null)
   assert.equal(repetirPergunta({ ...c.estado, ultimaPergunta: 'horario' }), null)
   assert.equal(repetirPergunta({ ...c.estado, ultimaPergunta: 'retomar', voltarPara: 'casa' })!.estado.ultimaPergunta, 'casa')
+})
+
+caso('IA contorna (Sabrina 23/10): frase dela + a pergunta, sem "nao entendi"; frase perigosa vira "Entendi."; limite de contornos', () => {
+  const base = ['meu filho tem laudo de autismo de 2025', 'Sabrina, ele tem 3 anos', 'ele faz terapia', 'plano', 'não temos', 'Não', 'somente eu e meu filho', 'meu salario é 6000']
+  const c = conversa(base)
+  assert.equal(c.estado.ultimaPergunta, 'beneficio_proprio')
+  // "mas liquido eu recebo menos" nao vira beneficio de outra pessoa: vai para a IA.
+  const salario = conversa([...base, 'mais ou menos\neu trablho clt\nmas liquido eu recebo menos'])
+  assert.equal(salario.ficha.beneficioProprio, undefined)
+  assert.equal(salario.ficha.outrosBeneficios, undefined)
+  const r = contornar(c.estado, 'Entendi, você trabalha de carteira assinada.', SEGUNDA_10H)!
+  assert.equal(r.respostas[0], 'Entendi, você trabalha de carteira assinada. Ele já recebe algum benefício do INSS, como pensão ou aposentadoria?')
+  assert.equal(r.estado.naoEntendeu, 0)
+  assert.equal(r.estado.contornos, 1)
+  for (const ruim of ['Você tem direito ao BPC.', 'Pode me mandar o laudo.', 'Custa R$ 1000.', 'Tudo bem?', 'O advogado resolve.', 'Entendi, recebe 6000.', 'sem ponto final', 'x'.repeat(130) + '.'])
+    assert.match(contornar(c.estado, ruim, SEGUNDA_10H)!.respostas[0], /^Entendi\. Ele já recebe/, ruim)
+  // Duvida juridica: texto do escritorio, anotada e com sinal.
+  const d = contornar(c.estado, '', SEGUNDA_10H, 'e se eu ganhar mais de 6000 perde?')!
+  assert.ok(d.respostas[0].startsWith(TEXTO_JURIDICO))
+  assert.ok(d.estado.ficha.duvidas?.includes('e se eu ganhar mais de 6000 perde?'))
+  assert.ok(d.sinais.some((s) => s.tipo === 'duvida'))
+  // Duas vezes seguidas sem a conversa andar: a terceira volta para o caminho normal.
+  const duas = contornar(contornar(c.estado, 'Certo.')!.estado, 'Certo.')!
+  assert.equal(contornar(duas.estado, 'Certo.'), null)
+  // Resposta de verdade zera os contornos.
+  assert.equal(conversa(['não recebe nada'], SEGUNDA_10H, duas.estado).estado.contornos, 0)
+  assert.equal(ponteSegura('Sem problema, não precisa ser exato.'), 'Sem problema, não precisa ser exato.')
 })
 
 console.log(`robo: ${total} conversas ok`)
