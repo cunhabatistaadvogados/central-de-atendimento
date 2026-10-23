@@ -158,6 +158,8 @@ export interface EstadoRobo {
   parcelasPedidas?: boolean
   /** a equipe marcou a conversa como resolvida ate esta mensagem do cliente (ISO); so a tela usa */
   resolvidoAte?: string
+  /** os dois horarios oferecidos (ISO), para ler a escolha na proxima mensagem */
+  ofertas?: string[]
 }
 
 export type Sinal =
@@ -1183,103 +1185,242 @@ function proximoDiaUtil(agora: Date): string {
   return dia === 5 || dia === 6 ? 'segunda' : 'amanhã'
 }
 
-/**
- * Horarios ja tomados por outras familias (reuniao confirmada ou pedida), em
- * ms. Quem chama `responder` passa a lista; fica aqui durante a chamada (sincrona)
- * para nao carregar o parametro por todas as funcoes que oferecem horario.
- * Sem isso o robo oferecia "amanha 9h ou 10h" a todo mundo (Catiane, 22/10/2026).
- */
+/** Grade de horarios do Dr. Andre: a equipe configura na tela Agenda. */
+export interface GradeDaAgenda {
+  /** dia da semana ("0" domingo a "6" sabado) -> inicios "HH:MM", hora de Santos */
+  horarios: Record<string, string[]>
+  /** toda semana: faixa "HH:MM" fechada naquele dia */
+  bloqueiosSemanais: { dia: number; de: string; ate: string; motivo?: string }[]
+  /** datas especificas fechadas (ISO): viagem, audiencia, folga */
+  bloqueios: { inicio: string; fim: string; motivo?: string }[]
+  duracaoMin: number
+  /** minutos minimos entre a conversa e o horario oferecido */
+  antecedenciaMin: number
+}
+
+/** Regras da Andreia (22/10/2026): manha das 8h as 11h, tarde a partir das 13h40, terca 15h-16h fechado. */
+export const GRADE_PADRAO: GradeDaAgenda = {
+  horarios: Object.fromEntries(['1', '2', '3', '4', '5'].map((d) => [d, ['08:00', '09:00', '10:00', '13:40', '14:40', '15:40', '16:40']])),
+  bloqueiosSemanais: [{ dia: 2, de: '15:00', ate: '16:00', motivo: 'Compromisso fixo do Dr. André' }],
+  bloqueios: [],
+  duracaoMin: 30,
+  antecedenciaMin: 120,
+}
+
+/** O que quem chama `responder` sabe da agenda: a grade e os horarios ja tomados (ISO). */
+export interface AgendaDaVez {
+  grade?: GradeDaAgenda
+  ocupados?: string[]
+}
+
+// Contexto da chamada (responder e sincrono): grade, horarios tomados por
+// outras familias e a oferta feita a esta familia, para nao carregar parametro
+// por todas as funcoes que oferecem horario. Antes o robo oferecia "amanha 9h
+// ou 10h" a todo mundo (Catiane e Flavia, 22/10/2026).
+let gradeDaVez: GradeDaAgenda = GRADE_PADRAO
 let ocupadosDaVez: number[] = []
-const HORAS_DE_REUNIAO = [9, 10, 11, 14, 15, 16]
+let ofertaDaVez: number[] | null = null
+
+const HORA = 3600000
+const DIA = 86400000
 const NOME_DO_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado']
 
-/** Horario exato (hora de Santos) no dia util `n` depois de hoje, em UTC. */
-function vagasDoDia(agora: Date, n: number): { rotulo: string; vagas: { hora: number; em: string }[] } {
-  const local = new Date(agora.getTime() - 3 * 3600 * 1000)
-  let dia = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate()))
-  let achados = 0
-  while (achados < n) {
-    dia = new Date(dia.getTime() + 86400000)
-    const sem = dia.getUTCDay()
-    if (sem >= 1 && sem <= 5) achados += 1
-  }
-  const rotulo = n === 1 ? proximoDiaUtil(agora) : NOME_DO_DIA[dia.getUTCDay()]
-  const vagas = HORAS_DE_REUNIAO.map((hora) => ({ hora, ms: dia.getTime() + (hora + 3) * 3600000 }))
-    .filter((v) => !ocupadosDaVez.some((o) => Math.abs(o - v.ms) < 3600000))
-    .map((v) => ({ hora: v.hora, em: new Date(v.ms).toISOString() }))
-  return { rotulo, vagas }
+function minutos(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number)
+  return h * 60 + (m || 0)
 }
 
-export function opcoesDeHorario(agora: Date): { texto: string; opcoes: [string, string]; em: [string?, string?] } {
-  const { hora } = relogioDeSantos(agora)
-  const proximo = proximoDiaUtil(agora)
-  if (emHorarioComercial(agora) && hora < 16) {
-    return { texto: `hoje à tarde ou ${proximo} de manhã`, opcoes: ['hoje à tarde', `${proximo} de manhã`], em: [] }
-  }
-  // Os dois primeiros horarios livres do proximo dia util que tiver dois.
-  for (let n = 1; n <= 10; n++) {
-    const { rotulo, vagas } = vagasDoDia(agora, n)
-    if (vagas.length < 2) continue
-    const [a, b] = vagas
-    const periodo = a.hora < 12 && b.hora < 12 ? ' de manhã' : a.hora >= 12 ? ' à tarde' : ''
-    return {
-      texto: `${rotulo}${periodo}, ${a.hora}h ou ${b.hora}h`,
-      opcoes: [`${rotulo} às ${a.hora}h`, `${rotulo} às ${b.hora}h`],
-      em: [a.em, b.em],
+/** Brasil sem horario de verao: hora de Santos = UTC-3. */
+const local = (ms: number) => new Date(ms - 3 * HORA)
+const horaLocal = (ms: number) => local(ms).getUTCHours()
+
+/** Meia-noite do dia de Santos de `ms`, contada como UTC. */
+function diaDeSantos(ms: number): number {
+  const l = local(ms)
+  return Date.UTC(l.getUTCFullYear(), l.getUTCMonth(), l.getUTCDate())
+}
+
+/** Horario da grade livre: com antecedencia, fora de bloqueio e sem outra familia. */
+function livre(ms: number, agora: Date): boolean {
+  const g = gradeDaVez
+  const dur = g.duracaoMin * 60000
+  if (ms < agora.getTime() + g.antecedenciaMin * 60000) return false
+  const l = local(ms)
+  const ini = l.getUTCHours() * 60 + l.getUTCMinutes()
+  if (g.bloqueiosSemanais.some((b) => b.dia === l.getUTCDay() && minutos(b.de) < ini + g.duracaoMin && ini < minutos(b.ate))) return false
+  if (g.bloqueios.some((b) => new Date(b.inicio).getTime() < ms + dur && ms < new Date(b.fim).getTime())) return false
+  return !ocupadosDaVez.some((o) => o < ms + dur && ms < o + dur)
+}
+
+/** Inicios da grade num dia (meia-noite de `diaDeSantos`), em ms UTC. */
+function horariosDoDia(dia0: number): number[] {
+  const sem = new Date(dia0).getUTCDay()
+  return (gradeDaVez.horarios[String(sem)] ?? []).map((h) => dia0 + (minutos(h) + 180) * 60000).sort((a, b) => a - b)
+}
+
+/** Proximos horarios livres a partir do dia `desde`, ate 3 semanas. */
+function vagas(agora: Date, desde = diaDeSantos(agora.getTime()), quantas = 2, filtro: (ms: number) => boolean = () => true): number[] {
+  const achados: number[] = []
+  for (let d = 0; d < 21 && achados.length < quantas; d++) {
+    for (const ms of horariosDoDia(desde + d * DIA)) {
+      if (achados.length < quantas && filtro(ms) && livre(ms, agora)) achados.push(ms)
     }
   }
-  return { texto: `${proximo} de manhã, 9h ou 10h`, opcoes: [`${proximo} às 9h`, `${proximo} às 10h`], em: [] }
+  return achados
 }
 
-/** ISO do horario escolhido, quando e um dos dois oferecidos. */
-function emDoHorario(quando: string, agora: Date): string | undefined {
-  const { opcoes, em } = opcoesDeHorario(agora)
-  const i = opcoes.indexOf(quando)
-  return i >= 0 ? em[i] : undefined
+function rotuloDoDia(ms: number, agora: Date): string {
+  const dias = Math.round((diaDeSantos(ms) - diaDeSantos(agora.getTime())) / DIA)
+  if (dias === 0) return 'hoje'
+  if (dias === 1) return 'amanhã'
+  const l = local(ms)
+  const nome = NOME_DO_DIA[l.getUTCDay()]
+  return dias < 7 ? nome : `${nome} (${l.getUTCDate()}/${l.getUTCMonth() + 1})`
 }
 
-const DIAS: [string, string][] = [
-  ['hoje', 'hoje'],
-  ['amanha', 'amanhã'],
-  ['segunda', 'segunda'],
-  ['terca', 'terça'],
-  ['quarta', 'quarta'],
-  ['quinta', 'quinta'],
-  ['sexta', 'sexta'],
+function rotuloDaHora(ms: number): string {
+  const l = local(ms)
+  const m = l.getUTCMinutes()
+  return `${l.getUTCHours()}h${m ? String(m).padStart(2, '0') : ''}`
+}
+
+const rotuloDoHorario = (ms: number, agora: Date) => `${rotuloDoDia(ms, agora)} às ${rotuloDaHora(ms)}`
+
+function periodoDe(par: number[]): string {
+  if (par.every((ms) => horaLocal(ms) < 12)) return ' de manhã'
+  if (par.every((ms) => horaLocal(ms) >= 12)) return ' à tarde'
+  return ''
+}
+
+/** "amanhã de manhã, 8h ou 9h" (mesmo dia) ou "hoje às 16h40 ou amanhã às 8h". */
+function textoDeDuas(par: number[], agora: Date): string {
+  const [a, b] = par
+  const dia = rotuloDoDia(a, agora)
+  if (dia === rotuloDoDia(b, agora)) return `${dia}${periodoDe(par)}, ${rotuloDaHora(a)} ou ${rotuloDaHora(b)}`
+  return `${rotuloDoHorario(a, agora)} ou ${rotuloDoHorario(b, agora)}`
+}
+
+/** "Amanhã de manhã tenho 8h ou 9h." ou "Tenho hoje às 16h40 ou amanhã às 8h." */
+function fraseDeDuas(par: number[], agora: Date): string {
+  const [a, b] = par
+  const dia = rotuloDoDia(a, agora)
+  if (dia === rotuloDoDia(b, agora)) return `${maiuscula(dia)}${periodoDe(par)} tenho ${rotuloDaHora(a)} ou ${rotuloDaHora(b)}.`
+  return `Tenho ${rotuloDoHorario(a, agora)} ou ${rotuloDoHorario(b, agora)}.`
+}
+
+/** Os dois horarios que o robo oferece: a oferta anterior se ainda livre, senao os dois primeiros livres. */
+export function opcoesDeHorario(agora: Date): { texto: string; opcoes: [string, string]; em: [string?, string?] } {
+  const par = ofertaDaVez?.length === 2 && ofertaDaVez.every((ms) => livre(ms, agora)) ? ofertaDaVez : vagas(agora)
+  if (par.length === 2) {
+    return {
+      texto: textoDeDuas(par, agora),
+      opcoes: [rotuloDoHorario(par[0], agora), rotuloDoHorario(par[1], agora)],
+      em: [new Date(par[0]).toISOString(), new Date(par[1]).toISOString()],
+    }
+  }
+  // Grade vazia ou cheia por 3 semanas: oferta solta e a equipe combina.
+  const proximo = proximoDiaUtil(agora)
+  return { texto: `${proximo} de manhã ou à tarde`, opcoes: [`${proximo} de manhã`, `${proximo} à tarde`], em: [] }
+}
+
+/** Para a tela Agenda: os proximos horarios que o robo ofereceria com esta grade. */
+export function proximosLivres(agora: Date, agenda: AgendaDaVez, quantas = 6): string[] {
+  gradeDaVez = agenda.grade ?? GRADE_PADRAO
+  ocupadosDaVez = (agenda.ocupados ?? []).map((o) => new Date(o).getTime()).filter((n) => !Number.isNaN(n))
+  ofertaDaVez = null
+  return vagas(agora, undefined, quantas).map((ms) => new Date(ms).toISOString())
+}
+
+const DIAS: [string, string, number][] = [
+  ['hoje', 'hoje', -1],
+  ['amanha', 'amanhã', -2],
+  ['segunda', 'segunda', 1],
+  ['terca', 'terça', 2],
+  ['quarta', 'quarta', 3],
+  ['quinta', 'quinta', 4],
+  ['sexta', 'sexta', 5],
 ]
+
+/** Escolha marcada (`quando`) ou outros horarios a oferecer (`outras`). */
+type Leitura = { quando: string; em?: string } | { outras: string }
 
 /**
  * Horario so vale quando a pessoa escolhe (C02). "Amanha nao posso" tira o
  * dia; pergunta, "sim" solto ou duvida devolvem null e o robo pergunta de novo.
+ * Dia, periodo ou hora fora da oferta: procura na grade. Livre, marca; tomado
+ * ou fora da grade, oferece os dois livres mais perto do que a pessoa pediu.
  */
-function lerHorario(t: string, agora: Date): string | null {
-  const { opcoes } = opcoesDeHorario(agora)
-  if (/\b(a primeira|o primeiro|primeira opcao|tanto faz|qualquer um|qualquer uma|qualquer horario|o que for melhor|o que tiver)\b/.test(t)) return opcoes[0]
-  if (/\b(segunda opcao|o segundo|a ultima|o ultimo)\b/.test(t)) return opcoes[1]
+function lerHorario(t: string, agora: Date): Leitura | null {
+  const { opcoes, em } = opcoesDeHorario(agora)
+  if (/\b(a primeira|o primeiro|primeira opcao|tanto faz|qualquer um|qualquer uma|qualquer horario|o que for melhor|o que tiver)\b/.test(t)) return { quando: opcoes[0], em: em[0] }
+  if (/\b(segunda opcao|o segundo|a ultima|o ultimo)\b/.test(t)) return { quando: opcoes[1], em: em[1] }
   const negado = (p: string) => new RegExp(`\\b${p}\\b[^,.;!?]{0,20}\\bn(ao)?\\b|\\bn(ao)?\\b[^,.;!?]{0,15}\\b${p}\\b`).test(t)
-  const dia = DIAS.find(([d]) => new RegExp(`\\b${d}\\b`).test(t) && !negado(d))?.[1]
+  const dito = DIAS.find(([d]) => new RegExp(`\\b${d}\\b`).test(t) && !negado(d))
   const periodo = ['manha', 'tarde'].find((p) => new RegExp(`\\b${p}\\b`).test(t) && !negado(p))
-  const h = t.match(/\b(\d{1,2})(?::(\d{2}))?\s?(?:h\b|hs\b|horas?\b)|\bas (\d{1,2})(?::(\d{2}))?\b|^(?:pode ser )?(?:as )?(\d{1,2})$/)
-  let hora = ''
+  const h = t.match(/\b(\d{1,2})h(\d{2})\b|\b(\d{1,2})(?::(\d{2}))?\s?(?:h|hs|horas?)\b|\bas (\d{1,2})(?::(\d{2}))?\b|^(?:pode ser )?(?:as )?(\d{1,2})(?::(\d{2}))?$/)
+  let hora: number | undefined
+  let minuto: number | undefined
   if (h) {
-    const n = Number(h[1] ?? h[3] ?? h[5])
-    const min = h[2] ?? h[4]
-    if (n >= 7 && n <= 20) hora = `${n}h${min && min !== '00' ? min : ''}`
+    let n = Number(h[1] ?? h[3] ?? h[5] ?? h[7])
+    const m = h[2] ?? h[4] ?? h[6] ?? h[8]
+    // "as 2 da tarde", "3h": de tarde e o que faz sentido num escritorio.
+    if (n >= 1 && n <= 6) n += 12
+    if (n >= 7 && n <= 20) {
+      hora = n
+      minuto = m === undefined ? undefined : Number(m)
+    }
   }
-  if (!dia && !periodo && !hora) return null
+  if (!dito && !periodo && hora === undefined) return null
+
+  const hoje0 = diaDeSantos(agora.getTime())
+  let dia0: number | undefined
+  if (dito) {
+    const alvo = dito[2]
+    if (alvo === -1) dia0 = hoje0
+    else if (alvo === -2) dia0 = hoje0 + DIA
+    else dia0 = hoje0 + ((alvo - new Date(hoje0).getUTCDay() + 7) % 7 || 7) * DIA
+  }
+  const casa = (ms: number) =>
+    (hora === undefined || (horaLocal(ms) === hora && (minuto === undefined || local(ms).getUTCMinutes() === minuto))) &&
+    (!periodo || (periodo === 'manha' ? horaLocal(ms) < 12 : horaLocal(ms) >= 12)) &&
+    (dia0 === undefined || diaDeSantos(ms) === dia0)
+
+  const oferecidos = em.filter((e): e is string => Boolean(e)).map((e) => new Date(e).getTime())
+  if (!oferecidos.length) {
+    // Sem grade livre: guarda o que a pessoa disse e a equipe combina.
+    const per = periodo === 'manha' ? ' de manhã' : periodo === 'tarde' ? ' à tarde' : ''
+    const dia = dito?.[1] ?? proximoDiaUtil(agora)
+    return { quando: hora === undefined ? `${dia}${per}` : `${dia} às ${hora}h${minuto ? String(minuto).padStart(2, '0') : ''}` }
+  }
+  const marcar = (ms: number): Leitura => ({ quando: rotuloDoHorario(ms, agora), em: new Date(ms).toISOString() })
+  const oferecer = (par: number[], antes = ''): Leitura => {
+    ofertaDaVez = par
+    return { outras: juntar(antes, fraseDeDuas(par, agora), 'Qual fica melhor?') }
+  }
+
+  const naOferta = oferecidos.filter(casa)
+  if (naOferta.length === 1) return marcar(naOferta[0])
+  // Pediu o que ja foi oferecido ("de manha" com 8h e 9h na mesa): nao escolheu.
+  if (naOferta.length === 2) return null
+
+  // Fora da oferta: a grade de ate 3 semanas, ou so o dia dito.
+  const livres = vagas(agora, dia0 ?? hoje0, dia0 === undefined ? 2 : 6, casa).filter((ms) => dia0 === undefined || diaDeSantos(ms) === dia0)
+  if (hora !== undefined) {
+    if (livres.length) return marcar(livres[0])
+    const doDia = dia0 === undefined ? [] : vagas(agora, dia0, 2).filter((ms) => diaDeSantos(ms) === dia0)
+    const par = doDia.length === 2 ? doDia : vagas(agora, dia0 ?? hoje0)
+    return par.length === 2 ? oferecer(par, 'Esse horário não está livre.') : null
+  }
+  if (livres.length >= 2) return oferecer(livres.slice(0, 2))
+  if (livres.length === 1) {
+    const outro = vagas(agora, hoje0, 3).find((ms) => ms !== livres[0])
+    return outro === undefined ? marcar(livres[0]) : oferecer([livres[0], outro].sort((a, b) => a - b))
+  }
+  const depois = vagas(agora, dia0 ?? hoje0)
+  if (depois.length < 2) return null
   const per = periodo === 'manha' ? ' de manhã' : periodo === 'tarde' ? ' à tarde' : ''
-  if (!dia) {
-    const op = opcoes.find((o) => (hora && o.endsWith(` ${hora}`)) || (!hora && per && o.includes(per.trim())))
-    if (op) return op
-    if (hora) return `às ${hora}`
-    return `${proximoDiaUtil(agora)}${per}`
-  }
-  if (hora) return `${dia} às ${hora}`
-  if (!per) {
-    const op = opcoes.find((o) => o.startsWith(dia))
-    if (op) return op
-  }
-  return `${dia}${per}`
+  const qual = dito ? `${maiuscula(dito[1])}${per}` : maiuscula(per.trim())
+  return oferecer(depois, `${qual} não tenho horário livre.`)
 }
 
 // ---------------------------------------------------------------------------
@@ -1524,8 +1665,20 @@ const TEM_CADUNICO = /\b(tem sim|temos sim|ja tem|ja temos|(minha|a) familia tem
  * mensagem que o motor nao entende vira "nao entendi" e, na segunda vez,
  * encaminhamento - conversa nunca fica sem dono.
  */
-export function responder(estadoAnterior: EstadoRobo, mensagem: string, agora: Date = new Date(), ocupados: string[] = []): Resultado {
-  ocupadosDaVez = ocupados.map((o) => new Date(o).getTime()).filter((n) => !Number.isNaN(n))
+export function responder(estadoAnterior: EstadoRobo, mensagem: string, agora: Date = new Date(), agenda: AgendaDaVez = {}): Resultado {
+  gradeDaVez = agenda.grade ?? GRADE_PADRAO
+  ocupadosDaVez = (agenda.ocupados ?? []).map((o) => new Date(o).getTime()).filter((n) => !Number.isNaN(n))
+  ofertaDaVez = estadoAnterior.ofertas?.map((o) => new Date(o).getTime()) ?? null
+  const r = conversar(estadoAnterior, mensagem, agora)
+  // Esperando a escolha: guarda o par oferecido para ler "9" ou "a primeira" depois.
+  if (r.estado.ultimaPergunta === 'horario' && !r.estado.pausado) {
+    const { em } = opcoesDeHorario(agora)
+    r.estado.ofertas = em.filter((e): e is string => Boolean(e))
+  } else delete r.estado.ofertas
+  return r
+}
+
+function conversar(estadoAnterior: EstadoRobo, mensagem: string, agora: Date): Resultado {
   const estado: EstadoRobo = { ...estadoAnterior, ficha: { ...estadoAnterior.ficha } }
   const sinais: Sinal[] = []
   const respostas: string[] = []
@@ -1653,10 +1806,11 @@ export function responder(estadoAnterior: EstadoRobo, mensagem: string, agora: D
   // cobram?"): marca o horario e responde o resto (familias F05 e F07).
   let pausarDepois = false
   if (d && perguntaFeita === 'horario' && d.tipo !== 'encerra') {
-    const quando = lerHorario(t, agora)
-    if (quando) {
+    const leitura = lerHorario(t, agora)
+    if (leitura && 'quando' in leitura) {
+      const { quando, em } = leitura
       estado.ficha.horario = quando
-      sinais.push({ tipo: 'reuniao', quando, em: emDoHorario(quando, agora) }, { tipo: 'etapa', etapa: 'reuniao' })
+      sinais.push({ tipo: 'reuniao', quando, em }, { tipo: 'etapa', etapa: 'reuniao' })
       if (estado.fechamento === 'limpo') {
         dizer(`Combinado, ${quando}.`)
         perguntaFeita = 'contrato_ok'
@@ -1738,8 +1892,15 @@ export function responder(estadoAnterior: EstadoRobo, mensagem: string, agora: D
 
   // Etapa do horario: so marca com escolha de verdade (C02, texto 11).
   if (perguntaFeita === 'horario') {
-    const quando = lerHorario(t, agora)
+    const leitura = lerHorario(t, agora)
     estado.ultimaPergunta = 'horario'
+    // Dia ou hora fora da oferta: oferece os livres mais perto do pedido.
+    if (leitura && 'outras' in leitura) {
+      estado.naoEntendeu = 0
+      dizer(leitura.outras)
+      return fim()
+    }
+    const quando = leitura?.quando
     if (!quando) {
       if (prazoNovo()) return encaminhar(TEXTO_PRAZO, 'PRIORIDADE: prazo de recurso')
       // Pergunta da familia na hora do horario: texto 3 e a duvida anotada,
@@ -1760,7 +1921,7 @@ export function responder(estadoAnterior: EstadoRobo, mensagem: string, agora: D
     }
     estado.naoEntendeu = 0
     f.horario = quando
-    sinais.push({ tipo: 'reuniao', quando, em: emDoHorario(quando, agora) })
+    sinais.push({ tipo: 'reuniao', quando, em: leitura?.em })
     sinais.push({ tipo: 'etapa', etapa: 'reuniao' })
     if (estado.fechamento === 'cuidado' || estado.fechamento === 'fraco') {
       // Com impedimento ou caso a olhar com cuidado, o advogado conversa antes: nada de contrato agora.

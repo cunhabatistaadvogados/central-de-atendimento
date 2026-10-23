@@ -286,7 +286,7 @@ export default function Home({ sessao, onSair }: { sessao: Sessao; onSair: () =>
             {aba === 'campanhas' && <Campanhas />}
             {aba === 'clientes' && <Clientes abrirCliente={abrirCliente} />}
             {aba === 'contratos' && <Contratos abrirCliente={abrirCliente} />}
-            {aba === 'agenda' && <Agenda abrirCliente={abrirCliente} />}
+            {aba === 'agenda' && <Agenda abrirCliente={abrirCliente} autor={sessao.nome} />}
             {aba === 'historico' && <Historico />}
             {aba === 'ajustes' && <Preferencias membro={membro} quemEstaOnline={quemEstaOnlineLigado} aoMudarQuemEstaOnline={setQuemEstaOnlineLigado} />}
           </div>

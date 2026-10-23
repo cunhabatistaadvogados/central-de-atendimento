@@ -224,3 +224,44 @@ export function iniciais(nome: string): string {
   if (!p.length) return nome.replace(/\D/g, '').slice(-2) || '?'
   return ((p[0][0] ?? '') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase()
 }
+
+/**
+ * Horarios ja tomados (ISO): reuniao confirmada ou horario exato pedido ao
+ * robo. O mesmo calculo do webhook, para a tela mostrar o que o robo oferece.
+ */
+export function horariosOcupados(clientes: Cliente[], exceto?: string): string[] {
+  const agora = Date.now()
+  return clientes
+    .filter((c) => c.id !== exceto && c.reuniao && c.etapa !== 'perdido')
+    .map((c) => (c.reuniao!.confirmada ? c.reuniao!.data : c.reuniao!.pedidoEm))
+    .filter((d): d is string => Boolean(d) && new Date(d as string).getTime() > agora - 3600000)
+}
+
+/** Outro cliente com reuniao nos mesmos 30 minutos (para avisar antes de confirmar). */
+export function conflitoDeHorario(clientes: Cliente[], iso: string, exceto: string, duracaoMin = 30): Cliente | undefined {
+  const ms = new Date(iso).getTime()
+  const dur = duracaoMin * 60000
+  return clientes.find((c) => {
+    if (c.id === exceto || !c.reuniao || c.etapa === 'perdido') return false
+    const d = c.reuniao.confirmada ? c.reuniao.data : c.reuniao.pedidoEm
+    if (!d) return false
+    const o = new Date(d).getTime()
+    return o < ms + dur && ms < o + dur
+  })
+}
+
+/** "sexta-feira, 23/10, às 9h" no horario de Brasilia, para a mensagem a familia. */
+export function dataDaReuniao(iso: string): string {
+  const d = new Date(iso)
+  const f = (o: Intl.DateTimeFormatOptions) => d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', ...o })
+  const min = Number(f({ minute: 'numeric' }))
+  return `${f({ weekday: 'long' })}, ${f({ day: '2-digit', month: '2-digit' })}, às ${Number(f({ hour: 'numeric', hour12: false }))}h${min ? String(min).padStart(2, '0') : ''}`
+}
+
+/** WhatsApp para a familia quando a equipe confirma, remarca ou desmarca. */
+export function mensagemDaReuniao(c: Cliente, tipo: 'confirmada' | 'remarcada' | 'desmarcada', iso: string): string {
+  const nome = primeiroNome(c.nome)
+  const ola = nome ? `Olá, ${nome}.` : 'Olá.'
+  if (tipo === 'desmarcada') return `${ola} Precisamos desmarcar a reunião com o ${ESCRITORIO.advogadoDoBpc} de ${dataDaReuniao(iso)}. A equipe já te chama para combinar um novo horário.`
+  return `${ola} Sua reunião com o ${ESCRITORIO.advogadoDoBpc} está ${tipo} para ${dataDaReuniao(iso)}. Ele vai te chamar por chamada de vídeo aqui no WhatsApp.`
+}

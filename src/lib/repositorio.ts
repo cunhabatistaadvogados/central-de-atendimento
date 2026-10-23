@@ -7,7 +7,7 @@
  * do cliente e do robo entram pelo webhook, as da equipe pela funcao
  * whatsapp-send, que envia de verdade pelo WhatsApp antes de gravar.
  */
-import { novoEstado, type EstadoRobo } from '@motor/robo'
+import { novoEstado, type EstadoRobo, type GradeDaAgenda } from '@motor/robo'
 import { dadosVazios } from './contrato'
 import { supabase } from './supabase'
 import type { Cliente, Contrato, DadosContrato, Documentos, Evento, ExtrasDoEnvio, Mensagem, Pendencia, TipoMidia } from './tipos'
@@ -390,4 +390,16 @@ export async function agendaOutlook(corpo: { acao: 'salvar' | 'apagar'; cliente_
     }
   }
   if (motivo) throw new Error(`Agenda do Outlook: ${motivo}`)
+}
+
+/** Grade de horarios que o robo oferece (tabela agenda_config, linha unica). Sem linha: null. */
+export async function carregarGrade(): Promise<GradeDaAgenda | null> {
+  const { data, error } = await exigir().from('agenda_config').select('grade').eq('id', 1).maybeSingle()
+  if (error) throw new Error(`Não consegui ler os horários da agenda: ${error.message}`)
+  return (data?.grade as GradeDaAgenda | undefined) ?? null
+}
+
+export async function salvarGrade(grade: GradeDaAgenda, autor: string): Promise<void> {
+  const { error } = await exigir().from('agenda_config').upsert({ id: 1, grade, atualizado_em: new Date().toISOString(), atualizado_por: autor })
+  if (error) throw new Error(`Não consegui salvar os horários: ${error.message}`)
 }

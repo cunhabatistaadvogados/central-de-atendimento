@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Etapa } from '@motor/robo'
-import { enviarComoEquipe, id, novoCliente, rascunhoDoContrato, receberDoCliente } from './atendimento'
+import { enviarComoEquipe, id, mensagemDaReuniao, novoCliente, rascunhoDoContrato, receberDoCliente } from './atendimento'
 import { baseDeDemonstracao } from './dados-demo'
 import { etapa as infoEtapa } from './escritorio'
 import { agendaOutlook, carregarClientes, carregarUmCliente, clientesMudadosDesde, enviarResposta, gravarDiferenca } from './repositorio'
@@ -52,9 +52,10 @@ export interface Acoes {
   salvarContrato: (id: string, contrato: Contrato) => void
   documentos: (id: string, docs: Documentos) => void
   resolverPendencia: (id: string, pendenciaId: string) => void
-  confirmarReuniao: (id: string, data: string, autor: string) => void
+  /** avisar: manda a data para a familia pelo WhatsApp (padrao sim). */
+  confirmarReuniao: (id: string, data: string, autor: string, avisar?: boolean) => void
   /** Desfaz a confirmacao: a reuniao volta para "a confirmar" e sai do Outlook. */
-  cancelarReuniao: (id: string, autor: string) => void
+  cancelarReuniao: (id: string, autor: string, avisar?: boolean) => void
   atualizarCliente: (id: string, campos: Partial<Pick<Cliente, 'nome' | 'telefone' | 'cidade' | 'responsavel'>>) => void
   recomecarDemonstracao: () => void
 }
@@ -161,6 +162,17 @@ function ProvedorDemonstracao({ children }: { children: ReactNode }) {
         return c.id
       },
       ...transformacoes(mudar),
+      // Na demonstracao a mensagem a familia aparece na conversa, sem WhatsApp.
+      confirmarReuniao: (cid, data, autor, avisar = true) => {
+        const c = base.clientes.find((x) => x.id === cid)
+        transformacoes(mudar).confirmarReuniao(cid, data, autor)
+        if (avisar && c) mudar(cid, (x) => enviarComoEquipe(x, mensagemDaReuniao(c, c.reuniao?.confirmada ? 'remarcada' : 'confirmada', data), autor, agora()))
+      },
+      cancelarReuniao: (cid, autor, avisar = true) => {
+        const c = base.clientes.find((x) => x.id === cid)
+        transformacoes(mudar).cancelarReuniao(cid, autor)
+        if (avisar && c?.reuniao?.confirmada && c.reuniao.data) mudar(cid, (x) => enviarComoEquipe(x, mensagemDaReuniao(c, 'desmarcada', c.reuniao!.data!), autor, agora()))
+      },
       recomecarDemonstracao: () => setBase(baseDeDemonstracao()),
     }),
     [base, mudar],
@@ -289,6 +301,18 @@ function ProvedorReal({ children }: { children: ReactNode }) {
     [],
   )
 
+  // Data da reuniao para a familia. Fora das 24h da ultima mensagem dela a
+  // Meta recusa texto livre: o erro aparece e a equipe avisa por outro jeito.
+  const avisarFamilia = useCallback(
+    (c: Cliente, texto: string) => {
+      if (!c.telefone) return setErro(`${c.nome || 'Este cliente'} ainda não tem WhatsApp: avise sobre a reunião por outro meio.`)
+      enviarResposta(c.id, texto)
+        .then(() => window.setTimeout(() => atualizarUm(c.id), ESPERA_PARA_GRAVAR_MS + 400))
+        .catch((e: Error) => setErro(`Reunião salva, mas a mensagem para a família não foi: ${e.message}`))
+    },
+    [atualizarUm],
+  )
+
   const acoes = useMemo<Acoes>(
     () => {
       const t = transformacoes(mudar)
@@ -314,15 +338,18 @@ function ProvedorReal({ children }: { children: ReactNode }) {
         throw new Error('Contato novo chega pelo WhatsApp, não pela tela.')
       },
       ...t,
-      confirmarReuniao: (cid, data, autor) => {
+      confirmarReuniao: (cid, data, autor, avisar = true) => {
+        const antes = atual.current.find((x) => x.id === cid)
         t.confirmarReuniao(cid, data, autor)
-        const c = atual.current.find((x) => x.id === cid)
-        outlook({ acao: 'salvar', cliente_id: cid, inicio: data, nome: c?.nome || c?.telefone, telefone: c?.telefone, autor })
+        outlook({ acao: 'salvar', cliente_id: cid, inicio: data, nome: antes?.nome || antes?.telefone, telefone: antes?.telefone, autor })
+        if (avisar && antes) avisarFamilia(antes, mensagemDaReuniao(antes, antes.reuniao?.confirmada ? 'remarcada' : 'confirmada', data))
       },
-      cancelarReuniao: (cid, autor) => {
+      cancelarReuniao: (cid, autor, avisar = true) => {
+        const antes = atual.current.find((x) => x.id === cid)
         const tinha = tinhaReuniao(cid)
         t.cancelarReuniao(cid, autor)
         if (tinha) outlook({ acao: 'apagar', cliente_id: cid })
+        if (avisar && tinha && antes?.reuniao?.data) avisarFamilia(antes, mensagemDaReuniao(antes, 'desmarcada', antes.reuniao.data))
       },
       moverEtapa: (cid, etapa, autor, motivoPerda) => {
         const tinha = tinhaReuniao(cid)
@@ -333,7 +360,7 @@ function ProvedorReal({ children }: { children: ReactNode }) {
       recomecarDemonstracao: () => {},
       }
     },
-    [clientes, carregando, erro, recarregar, mudar, atualizarUm, outlook],
+    [clientes, carregando, erro, recarregar, mudar, atualizarUm, outlook, avisarFamilia],
   )
   return <Contexto.Provider value={acoes}>{children}</Contexto.Provider>
 }

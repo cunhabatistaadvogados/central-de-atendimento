@@ -13,6 +13,7 @@ import {
   contratoComParteFixa,
   novoEstado,
   responder,
+  type AgendaDaVez,
   type EstadoRobo,
   type Sinal,
 } from '../supabase/functions/_shared/robo.ts'
@@ -32,12 +33,12 @@ function caso(nome: string, fn: () => void) {
   }
 }
 
-function conversa(falas: string[], agora = SEGUNDA_10H, inicio: EstadoRobo = novoEstado(), ocupados: string[] = []) {
+function conversa(falas: string[], agora = SEGUNDA_10H, inicio: EstadoRobo = novoEstado(), agenda: AgendaDaVez = {}) {
   let estado: EstadoRobo = inicio
   const robo: string[][] = []
   const sinais: Sinal[] = []
   for (const fala of falas) {
-    const r = responder(estado, fala, agora, ocupados)
+    const r = responder(estado, fala, agora, agenda)
     estado = r.estado
     robo.push(r.respostas)
     sinais.push(...r.sinais)
@@ -77,7 +78,7 @@ caso('anuncio: autismo com laudo, renda baixa, fecha com dois horarios', () => {
   assert.equal(c.ficha.pessoasCasa, 4)
   assert.equal(c.ficha.rendaCasa, 1200)
   assert.equal(c.ficha.campanha, 'autista')
-  assert.match(c.ultima, /^Juliana, pelo que você me contou, seu caso se qualifica sim para o atendimento com o nosso advogado de BPC, o Dr\. André\. Vamos marcar: hoje à tarde ou amanhã de manhã é melhor para você\?$/)
+  assert.match(c.ultima, /^Juliana, pelo que você me contou, seu caso se qualifica sim para o atendimento com o nosso advogado de BPC, o Dr\. André\. Vamos marcar: hoje à tarde, 13h40 ou 14h40 é melhor para você\?$/)
   assert.doesNotMatch(c.tudo, /tem direito|vai receber|vai ganhar|especialista|quando o benefício sair/)
   assert.ok(encaminhou(c, /Qualificação completa/))
   assert.ok(c.sinais.some((s) => s.tipo === 'etapa' && s.etapa === 'qualificado'))
@@ -103,9 +104,9 @@ caso('diagnostico ja dito na 1a mensagem nao e perguntado de novo', () => {
 })
 
 caso('horario escolhido marca reuniao e promete contrato', () => {
-  const c = conversa([...ATE_CASA, '3 pessoas, renda de 1500', 'não', 'ninguém', 'não', 'amanhã de manhã'])
-  assert.match(c.ultima, /^Combinado, amanhã de manhã\. .*contrato e a lista de documentos/)
-  assert.ok(c.sinais.some((s) => s.tipo === 'reuniao' && s.quando === 'amanhã de manhã'))
+  const c = conversa([...ATE_CASA, '3 pessoas, renda de 1500', 'não', 'ninguém', 'não', 'hoje às 14h40'])
+  assert.match(c.ultima, /^Combinado, hoje às 14h40\. .*contrato e a lista de documentos/)
+  assert.ok(c.sinais.some((s) => s.tipo === 'reuniao' && s.quando === 'hoje às 14h40' && s.em === '2026-10-19T17:40:00.000Z'))
   assert.ok(c.sinais.some((s) => s.tipo === 'etapa' && s.etapa === 'reuniao'))
   const fim = responder(c.estado, 'pode sim', SEGUNDA_10H)
   assert.equal(fim.estado.pausado, true)
@@ -118,19 +119,21 @@ caso('C02: no horario, pergunta e duvida nao marcam; "amanha nao posso" tira o d
   assert.ok(!preco.sinais.some((s) => s.tipo === 'reuniao'))
   assert.match(preco.ultima, /3 salários mínimos/)
   const quinta = conversa([...base, 'amanhã não posso, só na quinta'])
-  assert.equal(quinta.ficha.horario, 'quinta')
+  assert.equal(quinta.ficha.horario, undefined)
+  assert.equal(quinta.ultima, 'Quinta de manhã tenho 8h ou 9h. Qual fica melhor?')
+  assert.equal(conversa([...base, 'amanhã não posso, só na quinta', '9']).ficha.horario, 'quinta às 9h')
   const sim = conversa([...base, 'sim'])
   assert.ok(!sim.sinais.some((s) => s.tipo === 'reuniao'))
-  assert.equal(sim.ultima, 'Só para confirmar: prefere hoje à tarde ou amanhã de manhã?')
+  assert.equal(sim.ultima, 'Só para confirmar: prefere hoje à tarde, 13h40 ou 14h40?')
   const golpe = conversa([...base, 'quais documentos?'])
-  assert.match(golpe.ultima, /^Foto do RG .* A equipe te pede na hora certa\. Só para confirmar: prefere hoje à tarde ou amanhã de manhã\?$/)
+  assert.match(golpe.ultima, /^Foto do RG .* A equipe te pede na hora certa\. Só para confirmar: prefere hoje à tarde, 13h40 ou 14h40\?$/)
 })
 
 caso('texto 12: "nao" ao contrato antes da reuniao nunca vira "Perfeito"', () => {
   const c = conversa([...ATE_CASA, '3 pessoas, renda de 1500', 'não', 'ninguém', 'não', 'amanhã às 9h', 'não, prefiro ver o contrato só na reunião'])
   assert.equal(c.ficha.horario, 'amanhã às 9h')
   assert.equal(c.ultima, 'Tudo bem. A equipe te chama no horário combinado e explica tudo antes de qualquer contrato.')
-  const protesto = conversa([...ATE_CASA, '3 pessoas, renda de 1500', 'não', 'ninguém', 'não', 'hoje à tarde', 'pera, eu n marquei nada'])
+  const protesto = conversa([...ATE_CASA, '3 pessoas, renda de 1500', 'não', 'ninguém', 'não', '13h40', 'pera, eu n marquei nada'])
   assert.match(protesto.ultima, /^Desculpa, entendi errado\. Só para confirmar/)
   assert.equal(protesto.estado.pausado, false)
 })
@@ -280,18 +283,18 @@ caso('area do idoso: abertura pelo gatilho, familiar, honorarios sem valor fixo,
 
 caso('item 1 / C16: 64 anos "e pela idade": texto 6 e horario, sem laudo nem medico', () => {
   const c = conversa(['oi, é pra mim, tenho 64 anos', 'Marcos', 'é pela idade mesmo'])
-  assert.equal(c.ultima, 'O BPC do idoso é a partir dos 65 anos. Vou passar seu caso para o advogado ver o que dá para fazer desde já. Hoje à tarde ou amanhã de manhã é melhor?')
+  assert.equal(c.ultima, 'O BPC do idoso é a partir dos 65 anos. Vou passar seu caso para o advogado ver o que dá para fazer desde já. Hoje à tarde, 13h40 ou 14h40 é melhor?')
   assert.ok(encaminhou(c, /menos de 65 anos sem deficiência/))
   assert.equal(c.ficha.diagnostico, undefined)
-  const depois = conversa(['oi, é pra mim, tenho 64 anos', 'Marcos', 'é pela idade mesmo', 'não', 'amanhã de manhã'])
+  const depois = conversa(['oi, é pra mim, tenho 64 anos', 'Marcos', 'é pela idade mesmo', 'não', 'a primeira'])
   assert.doesNotMatch(depois.tudo, /médico parceiro|laudo|se qualifica|contrato/)
-  assert.equal(depois.ultima, 'Combinado, amanhã de manhã. A equipe te chama nesse horário.')
+  assert.equal(depois.ultima, 'Combinado, hoje às 13h40. A equipe te chama nesse horário.')
   assert.equal(depois.estado.pausado, true)
 })
 
 caso('item 4 / C15: a propria pessoa ja recebe pensao: texto 7 e horario, nunca "se qualifica"', () => {
   const c = conversa([...ATE_CASA, 'somos 2 e a renda é 300 reais', 'ele recebe pensão por morte do pai'])
-  assert.equal(c.ultima, 'Como ele já recebe um benefício, o advogado precisa olhar seu caso com cuidado antes de qualquer pedido. Hoje à tarde ou amanhã de manhã é melhor para te chamarem?')
+  assert.equal(c.ultima, 'Como ele já recebe um benefício, o advogado precisa olhar seu caso com cuidado antes de qualquer pedido. Hoje à tarde, 13h40 ou 14h40 é melhor para te chamarem?')
   assert.ok(encaminhou(c, /já recebe benefício/))
   const oba = responder(c.estado, 'oba então dá pra receber os dois!', SEGUNDA_10H)
   assert.doesNotMatch(oba.respostas.join(' '), /se qualifica|Combinado/)
@@ -467,29 +470,46 @@ caso('nao entendeu duas vezes: encaminha', () => {
   assert.equal(c.estado.pausado, true)
 })
 
-caso('fora do horario: oferece amanha 9h ou 10h e avisa que a equipe confirma cedo', () => {
+caso('fora do horario: oferece amanha 8h ou 9h e avisa que a equipe confirma cedo', () => {
   const falas = [...ATE_CASA, '4 pessoas 1000 reais', 'não', 'não', 'não']
   const c = conversa(falas, SEGUNDA_20H)
-  assert.match(c.ultima, /amanhã de manhã, 9h ou 10h/)
+  assert.match(c.ultima, /amanhã de manhã, 8h ou 9h/)
   assert.match(c.ultima, /equipe confirma logo cedo/)
-  assert.match(conversa(falas, SEXTA_19H).ultima, /segunda de manhã/)
+  assert.match(conversa(falas, SEXTA_19H).ultima, /segunda de manhã, 8h ou 9h/)
 })
 
 caso('horario ja tomado por outra familia nao e oferecido de novo (Catiane, 22/10/2026)', () => {
   const falas = [...ATE_CASA, '4 pessoas 1000 reais', 'não', 'não', 'não']
   // Terca 9h em Santos = 12h UTC: ja pedida por outra familia.
-  const amanha9h = new Date(SEGUNDA_20H.getTime() + 24 * 3600000)
-  amanha9h.setUTCHours(12, 0, 0, 0)
-  const c = conversa(falas, SEGUNDA_20H, novoEstado(), [amanha9h.toISOString()])
-  assert.match(c.ultima, /amanhã de manhã, 10h ou 11h/)
-  const escolheu = conversa([...falas, '10'], SEGUNDA_20H, novoEstado(), [amanha9h.toISOString()])
+  const terca9h = '2026-10-20T12:00:00.000Z'
+  const c = conversa(falas, SEGUNDA_20H, novoEstado(), { ocupados: [terca9h] })
+  assert.match(c.ultima, /amanhã de manhã, 8h ou 10h/)
+  const escolheu = conversa([...falas, '10'], SEGUNDA_20H, novoEstado(), { ocupados: [terca9h] })
   const pedido = escolheu.sinais.find((s) => s.tipo === 'reuniao')
   assert.ok(pedido && pedido.tipo === 'reuniao')
   assert.equal(pedido.quando, 'amanhã às 10h')
-  assert.equal(pedido.em, new Date(amanha9h.getTime() + 3600000).toISOString())
+  assert.equal(pedido.em, '2026-10-20T13:00:00.000Z')
+  // Pediu justo o horario tomado: oferece os livres do dia, sem marcar.
+  const tomado = conversa([...falas, 'amanhã às 9h'], SEGUNDA_20H, novoEstado(), { ocupados: [terca9h] })
+  assert.ok(!tomado.sinais.some((s) => s.tipo === 'reuniao'))
+  assert.equal(tomado.ultima, 'Esse horário não está livre. Amanhã de manhã tenho 8h ou 10h. Qual fica melhor?')
   // Dia cheio: vai para o dia util seguinte.
-  const cheio = [9, 10, 11, 14, 15].map((h) => new Date(amanha9h.getTime() + (h - 9) * 3600000).toISOString())
-  assert.match(conversa(falas, SEGUNDA_20H, novoEstado(), cheio).ultima, /quarta de manhã, 9h ou 10h/)
+  const cheio = ['11:00', '12:00', '13:00', '16:40', '17:40', '18:40', '19:40'].map((h) => `2026-10-20T${h}:00.000Z`)
+  assert.match(conversa(falas, SEGUNDA_20H, novoEstado(), { ocupados: cheio }).ultima, /quarta de manhã, 8h ou 9h/)
+})
+
+caso('grade da equipe: so oferece o que a Andreia liberou, sem bloqueio', () => {
+  const falas = [...ATE_CASA, '4 pessoas 1000 reais', 'não', 'não', 'não']
+  // Terca 15h-16h fechado: 14h40 e 15h40 nunca aparecem na terca.
+  const tarde = conversa([...falas, 'amanhã à tarde'], SEGUNDA_20H)
+  assert.equal(tarde.ultima, 'Amanhã à tarde tenho 13h40 ou 16h40. Qual fica melhor?')
+  const marcou = conversa([...falas, 'amanhã à tarde', '16h40'], SEGUNDA_20H)
+  assert.ok(marcou.sinais.some((s) => s.tipo === 'reuniao' && s.quando === 'amanhã às 16h40' && s.em === '2026-10-20T19:40:00.000Z'))
+  // Grade so de quinta 10h e 11h, e a quinta 22 bloqueada: vai para a outra quinta.
+  const grade = { horarios: { '4': ['10:00', '11:00'] }, bloqueiosSemanais: [], bloqueios: [{ inicio: '2026-10-22T03:00:00.000Z', fim: '2026-10-23T03:00:00.000Z' }], duracaoMin: 30, antecedenciaMin: 60 }
+  assert.match(conversa(falas, SEGUNDA_20H, novoEstado(), { grade }).ultima, /quinta \(29\/10\) de manhã, 10h ou 11h/)
+  // "de manha" sem dia: os dois primeiros livres de manha.
+  assert.equal(conversa([...falas, 'de manhã'], SEGUNDA_10H).ultima, 'Amanhã de manhã tenho 8h ou 9h. Qual fica melhor?')
 })
 
 caso('"atendem em Minas?" na 1a mensagem: responde, guarda a cidade e nao a toma por nome', () => {
@@ -584,7 +604,7 @@ caso('F12: "minha mae ja e cliente, gostaria de noticias" vai direto a equipe e 
 caso('F01, F04, F05, F10: pergunta na hora do horario vira duvida para o advogado, nunca so o horario de novo', () => {
   const base = [...ATE_CASA, '3 pessoas, renda de 1500', 'não', 'ninguém', 'não']
   const aprendiz = conversa([...base, 'mas sendo aprendiz ele ainda pode pedir de novo?'])
-  assert.equal(aprendiz.ultima, `${TEXTO_JURIDICO} Só para confirmar: prefere hoje à tarde ou amanhã de manhã?`)
+  assert.equal(aprendiz.ultima, `${TEXTO_JURIDICO} Só para confirmar: prefere hoje à tarde, 13h40 ou 14h40?`)
   assert.ok(aprendiz.sinais.some((s) => s.tipo === 'duvida'))
   const semInterrogacao = conversa([...base, 'mas o laudo de 2017 serve ou tem q fazer outro'])
   assert.ok(semInterrogacao.ultima.startsWith(TEXTO_JURIDICO))
@@ -598,9 +618,9 @@ caso('F01, F04, F05, F10: pergunta na hora do horario vira duvida para o advogad
 
 caso('F07, F05: horario escolhido junto com uma pergunta e marcado', () => {
   const base = [...ATE_CASA, '3 pessoas, renda de 1500', 'não', 'ninguém', 'não']
-  const c = conversa([...base, 'amanha de manha ta bom. e quanto vcs cobram?'])
-  assert.ok(c.sinais.some((s) => s.tipo === 'reuniao' && s.quando === 'amanhã de manhã'))
-  assert.match(c.ultima, /Combinado, amanhã de manhã\.[\s\S]*3 salários mínimos e 30% dos atrasados/)
+  const c = conversa([...base, 'amanha as 9 ta bom. e quanto vcs cobram?'])
+  assert.ok(c.sinais.some((s) => s.tipo === 'reuniao' && s.quando === 'amanhã às 9h'))
+  assert.match(c.ultima, /Combinado, amanhã às 9h\.[\s\S]*3 salários mínimos e 30% dos atrasados/)
 })
 
 caso('F06 (critica): "quanto custa isso" logo depois do medico parceiro nunca recebe a tabela', () => {
@@ -697,9 +717,9 @@ caso('F09: o que a familia explica do arquivo mandado nao vira resposta; fechame
   const c = conversa([...ATE_CASA.slice(0, 2), '[arquivo recebido]', 'é a foto do laudo pra vc ver'])
   assert.equal(c.ficha.rotina, undefined)
   assert.match(c.ultima, /rotina/)
-  const fraco = conversa([...ATE_CASA, 'somos 2 e a renda é 4000', 'não', 'nunca pedimos', 'amanhã de manhã'])
+  const fraco = conversa([...ATE_CASA, 'somos 2 e a renda é 4000', 'não', 'nunca pedimos', 'amanhã às 8h'])
   assert.match(fraco.robo.at(-2)!.join(' '), /olhar com cuidado/)
-  assert.equal(fraco.ultima, 'Combinado, amanhã de manhã. A equipe te chama nesse horário.')
+  assert.equal(fraco.ultima, 'Combinado, amanhã às 8h. A equipe te chama nesse horário.')
 })
 
 caso('F09: "n. e ai tem direito?" responde a pergunta feita e anota a duvida', () => {

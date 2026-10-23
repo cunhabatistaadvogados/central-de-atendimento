@@ -1,8 +1,10 @@
-import { CalendarDays, Clock, Video } from 'lucide-react'
+import { CalendarDays, Clock, Settings2, Video } from 'lucide-react'
+import { useState } from 'react'
 import { Avatar, ChipEtapa, Vazio } from '@/components/ui'
 import { mesmoDia } from '@/lib/formato'
 import { useDados } from '@/lib/store'
 import type { Cliente } from '@/lib/tipos'
+import HorariosDoRobo from './HorariosDoRobo'
 
 function Grupo({ titulo, itens, abrirCliente, destaque = false }: { titulo: string; itens: Cliente[]; abrirCliente: (id: string) => void; destaque?: boolean }) {
   if (!itens.length) return null
@@ -14,7 +16,9 @@ function Grupo({ titulo, itens, abrirCliente, destaque = false }: { titulo: stri
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {itens.map((c) => {
           const r = c.reuniao!
-          const d = r.data ? new Date(r.data) : null
+          // Pedido com horario exato (escolhido com o robo) tambem mostra a data.
+          const quando = r.confirmada ? r.data : r.pedidoEm
+          const d = quando ? new Date(quando) : null
           return (
             <button key={c.id} type="button" onClick={() => abrirCliente(c.id)} className="cartao flex gap-4 p-4 text-left transition hover:-translate-y-0.5 hover:border-ouro-300">
               <div className={`flex w-16 shrink-0 flex-col items-center justify-center rounded-2xl ${r.confirmada ? 'bg-marinho-800 text-white' : 'bg-orange-50 text-orange-700'}`}>
@@ -48,8 +52,9 @@ function Grupo({ titulo, itens, abrirCliente, destaque = false }: { titulo: stri
   )
 }
 
-export default function Agenda({ abrirCliente }: { abrirCliente: (id: string) => void }) {
+export default function Agenda({ abrirCliente, autor }: { abrirCliente: (id: string) => void; autor: string }) {
   const { clientes } = useDados()
+  const [grade, setGrade] = useState(false)
   const hoje = new Date()
   const amanha = new Date(hoje.getTime() + 86400000)
   const com = clientes.filter((c) => c.reuniao && c.etapa !== 'perdido')
@@ -60,10 +65,15 @@ export default function Agenda({ abrirCliente }: { abrirCliente: (id: string) =>
   const proximas = confirmadas.filter((c) => new Date(c.reuniao!.data!) > amanha && !mesmoDia(new Date(c.reuniao!.data!), amanha))
   const passadas = confirmadas.filter((c) => new Date(c.reuniao!.data!) < hoje && !mesmoDia(new Date(c.reuniao!.data!), hoje))
 
-  if (!com.length) return <Vazio icone={<CalendarDays className="h-6 w-6" />} titulo="Agenda vazia" texto="Quando o robô terminar uma qualificação, ele oferece dois horários e o pedido aparece aqui." />
-
   return (
     <div className="space-y-8">
+      <div className="flex justify-end">
+        <button type="button" onClick={() => setGrade((v) => !v)} className={grade ? 'botao-primario py-2' : 'botao-claro py-2'}>
+          <Settings2 className="h-4 w-4" /> Horários do robô
+        </button>
+      </div>
+      {grade && <HorariosDoRobo autor={autor} />}
+      {!com.length && <Vazio icone={<CalendarDays className="h-6 w-6" />} titulo="Agenda vazia" texto="Quando o robô terminar uma qualificação, ele oferece dois horários livres e o pedido aparece aqui." />}
       <Grupo titulo="Pedidas pelo robô, a confirmar" itens={aConfirmar} abrirCliente={abrirCliente} destaque />
       <Grupo titulo="Hoje" itens={deHoje} abrirCliente={abrirCliente} />
       <Grupo titulo="Amanhã" itens={deAmanha} abrirCliente={abrirCliente} />

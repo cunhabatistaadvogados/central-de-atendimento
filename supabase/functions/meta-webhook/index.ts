@@ -8,7 +8,7 @@
 // Segredos: WHATSAPP_VERIFY_TOKEN, META_APP_SECRET, WHATSAPP_ACCESS_TOKEN,
 // WHATSAPP_PHONE_NUMBER_ID. SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY ja vem do ambiente.
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { contratoComParteFixa, novoEstado, responder, type EstadoRobo, type Etapa } from '../_shared/robo.ts'
+import { contratoComParteFixa, novoEstado, responder, type AgendaDaVez, type EstadoRobo, type Etapa, type GradeDaAgenda } from '../_shared/robo.ts'
 import { assinaturaValida, baixarMidia, enviarTexto } from '../_shared/whatsapp.ts'
 import { interpretar } from '../_shared/interprete.ts'
 
@@ -134,20 +134,23 @@ async function guardarMidia(linhaId: string, clienteId: string, midia: MidiaMeta
 }
 
 /**
- * Horarios ja tomados por outras familias: reuniao confirmada (data) ou pedida
- * ao robo num horario exato (pedidoEm). O robo nao oferece esses de novo
- * (Catiane e outra familia receberam "amanha 9h ou 10h" no mesmo dia).
+ * Grade da tela Agenda e horarios ja tomados por outras familias: reuniao
+ * confirmada (data) ou pedida ao robo num horario exato (pedidoEm). O robo so
+ * oferece o que a equipe liberou e ninguem pegou (Catiane e Flavia, 22/10/2026).
  */
-async function horariosOcupados(clienteId: string): Promise<string[]> {
-  const { data, error } = await banco.from('clientes').select('reuniao').not('reuniao', 'is', null).neq('etapa', 'perdido').neq('id', clienteId)
-  if (error) {
-    console.warn('[meta-webhook] horarios ocupados:', error.message)
-    return []
-  }
+async function agendaDaVez(clienteId: string): Promise<AgendaDaVez> {
+  const [reunioes, config] = await Promise.all([
+    banco.from('clientes').select('reuniao').not('reuniao', 'is', null).neq('etapa', 'perdido').neq('id', clienteId),
+    banco.from('agenda_config').select('grade').eq('id', 1).maybeSingle(),
+  ])
+  if (reunioes.error) console.warn('[meta-webhook] horarios ocupados:', reunioes.error.message)
+  if (config.error) console.warn('[meta-webhook] grade da agenda:', config.error.message)
   const agora = Date.now()
-  return (data ?? [])
+  const ocupados = (reunioes.data ?? [])
     .map((l: { reuniao: { data?: string; pedidoEm?: string; confirmada?: boolean } | null }) => (l.reuniao?.confirmada ? l.reuniao.data : l.reuniao?.pedidoEm))
     .filter((d): d is string => Boolean(d) && new Date(d as string).getTime() > agora - 3600000)
+  // Sem grade salva na tela, o robo usa a padrao (regras da Andreia).
+  return { ocupados, grade: (config.data?.grade as GradeDaAgenda | undefined) ?? undefined }
 }
 
 // "Nao entendi" das regras: o contador subiu ou o robo passou para a equipe por isso.
@@ -237,8 +240,8 @@ async function processar(m: MensagemMeta) {
   }
 
   const estado: EstadoRobo = cliente.robo?.ficha ? cliente.robo : novoEstado()
-  const ocupados = await horariosOcupados(cliente.id)
-  let r = responder(estado, entrada, em, ocupados)
+  const agenda = await agendaDaVez(cliente.id)
+  let r = responder(estado, entrada, em, agenda)
 
   // As regras nao entenderam: o interprete (Claude) reescreve a resposta e o
   // robo tenta de novo. So vale se a segunda volta entender; senao fica como
@@ -249,7 +252,7 @@ async function processar(m: MensagemMeta) {
       const i = await interpretar(pergunta, entrada)
       if (i.erro) console.warn('[meta-webhook] interprete:', i.erro)
       if (i.entendeu) {
-        const segunda = responder(estado, i.resposta, em, ocupados)
+        const segunda = responder(estado, i.resposta, em, agenda)
         if (!naoEntendeu(estado, segunda)) {
           r = segunda
           await evento(cliente.id, 'robo', `Intérprete: "${entrada.slice(0, 120)}" entendido como "${i.resposta}"`)

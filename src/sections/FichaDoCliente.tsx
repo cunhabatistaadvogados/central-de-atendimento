@@ -3,7 +3,7 @@ import { dinheiro, ehIdoso, rendaPorPessoa, SALARIO_MINIMO, temLaudo } from '@mo
 import { AlarmClock, Bot, CalendarCheck2, Check, CheckCircle2, Circle, FileSignature, MessagesSquare, Smartphone, X } from 'lucide-react'
 import { useState } from 'react'
 import { Avatar, ChipEtapa, ChipOrigem, ChipPublico, PainelLateral } from '@/components/ui'
-import { publicos, textoDoLaudo } from '@/lib/atendimento'
+import { conflitoDeHorario, publicos, textoDoLaudo } from '@/lib/atendimento'
 import { ETAPAS, MOTIVOS_DE_PERDA } from '@/lib/escritorio'
 import { dataHora, haQuanto } from '@/lib/formato'
 import { formatarTelefone, numeroDoWhatsApp } from '@/lib/repositorio'
@@ -32,12 +32,14 @@ const DOCS: [keyof Documentos, string][] = [
 ]
 
 function Resumo({ c, autor }: { c: Cliente; autor: string }) {
-  const { documentos, resolverPendencia, confirmarReuniao, cancelarReuniao, demonstracao } = useDados()
+  const { documentos, resolverPendencia, confirmarReuniao, cancelarReuniao, demonstracao, clientes } = useDados()
   const f = c.robo.ficha
   const rpp = rendaPorPessoa(f)
   // Horario exato que a familia escolheu com o robo ja vem no campo.
   const [data, setData] = useState(() => (c.reuniao?.pedidoEm ? paraCampo(c.reuniao.pedidoEm) : ''))
   const [remarcando, setRemarcando] = useState(false)
+  const [avisar, setAvisar] = useState(true)
+  const conflito = data ? conflitoDeHorario(clientes, new Date(data).toISOString(), c.id) : undefined
   const para = f.para === 'proprio' ? 'O(a) próprio(a)' : f.para === 'filho' ? 'Filho' : f.para === 'filha' ? 'Filha' : f.quem ? f.quem.replace(/^su[ao] /, '').replace(/^./, (x) => x.toUpperCase()) : undefined
 
   const caminho = [
@@ -149,7 +151,7 @@ function Resumo({ c, autor }: { c: Cliente; autor: string }) {
                     type="button"
                     disabled={!data}
                     onClick={() => {
-                      confirmarReuniao(c.id, new Date(data).toISOString(), autor)
+                      confirmarReuniao(c.id, new Date(data).toISOString(), autor, avisar)
                       setRemarcando(false)
                       setData('')
                     }}
@@ -159,6 +161,15 @@ function Resumo({ c, autor }: { c: Cliente; autor: string }) {
                   </button>
                 </div>
               )}
+              {(!c.reuniao.confirmada || remarcando) && conflito && (
+                <p className="mt-2 text-[11px] font-bold text-red-600">Atenção: {conflito.nome || conflito.telefone} já tem reunião nesse horário.</p>
+              )}
+              {(!c.reuniao.confirmada || remarcando) && (
+                <label className="mt-2 flex items-center gap-2 text-[11px] text-slate-600">
+                  <input type="checkbox" checked={avisar} onChange={(e) => setAvisar(e.target.checked)} className="h-3.5 w-3.5 accent-marinho-800" />
+                  Avisar a família pelo WhatsApp com a data e a hora
+                </label>
+              )}
               {c.reuniao.confirmada && !remarcando && (
                 <div className="mt-2 flex gap-3 pl-6 text-[11px] font-bold">
                   <button type="button" onClick={() => setRemarcando(true)} className="text-marinho-700 hover:underline">
@@ -166,7 +177,7 @@ function Resumo({ c, autor }: { c: Cliente; autor: string }) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => window.confirm('Desmarcar a reunião? Ela sai da agenda do Outlook e volta para "a confirmar".') && cancelarReuniao(c.id, autor)}
+                    onClick={() => window.confirm('Desmarcar a reunião? Ela sai da agenda do Outlook, volta para "a confirmar" e a família recebe um aviso pelo WhatsApp.') && cancelarReuniao(c.id, autor, avisar)}
                     className="text-red-600 hover:underline"
                   >
                     Desmarcar
