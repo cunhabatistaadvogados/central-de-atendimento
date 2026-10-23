@@ -2,6 +2,7 @@ import { GRADE_PADRAO, horariosEntre, proximosLivres, type GradeDaAgenda } from 
 import { CalendarClock, CircleHelp, Plus, Save, Wand2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { horariosOcupados } from '@/lib/atendimento'
+import { CHAVE_GRADE_DEMO } from '@/lib/grade'
 import { carregarGrade, salvarGrade } from '@/lib/repositorio'
 import { useDados } from '@/lib/store'
 
@@ -13,7 +14,7 @@ const DIAS = [
   { n: 5, nome: 'Sexta' },
   { n: 6, nome: 'Sábado' },
 ]
-const CHAVE_DEMO = 'cbaa-grade-demo'
+const CHAVE_DEMO = CHAVE_GRADE_DEMO
 
 /** "13:40" -> "13h40"; "09:00" -> "9h". */
 function hhmm(h: string): string {

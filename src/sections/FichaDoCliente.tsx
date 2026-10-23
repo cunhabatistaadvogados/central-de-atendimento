@@ -1,11 +1,12 @@
 import type { Etapa } from '@motor/robo'
-import { dinheiro, ehIdoso, rendaPorPessoa, SALARIO_MINIMO, temLaudo } from '@motor/robo'
+import { dinheiro, ehIdoso, horariosEntre, proximosLivres, rendaPorPessoa, SALARIO_MINIMO, temLaudo } from '@motor/robo'
 import { AlarmClock, Bot, CalendarCheck2, Check, CheckCircle2, Circle, FileSignature, MessagesSquare, Smartphone, X } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Avatar, ChipEtapa, ChipOrigem, ChipPublico, PainelLateral } from '@/components/ui'
-import { conflitoDeHorario, publicos, textoDoLaudo } from '@/lib/atendimento'
+import { conflitoDeHorario, horariosOcupados, publicos, textoDoLaudo } from '@/lib/atendimento'
 import { ETAPAS, MOTIVOS_DE_PERDA } from '@/lib/escritorio'
 import { dataHora, haQuanto } from '@/lib/formato'
+import { useGradeDaAgenda } from '@/lib/grade'
 import { formatarTelefone, numeroDoWhatsApp } from '@/lib/repositorio'
 import { useDados } from '@/lib/store'
 import type { Cliente, Documentos } from '@/lib/tipos'
@@ -40,17 +41,57 @@ function Resumo({ c, autor }: { c: Cliente; autor: string }) {
   const [remarcando, setRemarcando] = useState(false)
   const [avisar, setAvisar] = useState(true)
   const conflito = data ? conflitoDeHorario(clientes, new Date(data).toISOString(), c.id) : undefined
+  // Proximos horarios livres da grade (Agenda > Horarios do robo), sem os ja tomados.
+  const grade = useGradeDaAgenda(demonstracao)
+  const livres = useMemo(() => proximosLivres(new Date(), { grade, ocupados: horariosOcupados(clientes, c.id) }, 6), [grade, clientes, c.id])
+  const [dia, hora] = data ? data.split('T') : ['', '']
+  // Horas do dia escolhido: as da grade e as meias horas das 7h as 20h.
+  const horasDoDia = useMemo(() => {
+    const daGrade = dia ? (grade.horarios[String(new Date(`${dia}T12:00`).getDay())] ?? []) : []
+    return [...new Set([...daGrade, ...horariosEntre('07:00', '20:30', 30), ...(hora ? [hora] : [])])].sort()
+  }, [dia, hora, grade])
   const para = f.para === 'proprio' ? 'O(a) próprio(a)' : f.para === 'filho' ? 'Filho' : f.para === 'filha' ? 'Filha' : f.quem ? f.quem.replace(/^su[ao] /, '').replace(/^./, (x) => x.toUpperCase()) : undefined
 
   // Horario + aviso a familia: confirmar o pedido do robo, remarcar, ou marcar
   // do zero quando a equipe assumiu antes do robo oferecer horario (23/10/2026).
+  // Sem o calendario do navegador (abria por cima da ficha e mostrava minutos
+  // soltos): botoes com os proximos horarios livres da grade, e dia + hora.
   const escolherHorario = (rotulo: string) => (
     <>
-      <div className="mt-3 flex gap-2">
-        <input type="datetime-local" value={data} onChange={(e) => setData(e.target.value)} className="campo py-2" />
+      {livres.length > 0 && (
+        <div className="mt-3">
+          <p className="text-[11px] font-bold text-slate-500">Próximos horários livres</p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {livres.map((iso) => {
+              const valor = paraCampo(iso)
+              return (
+                <button
+                  key={iso}
+                  type="button"
+                  onClick={() => setData(valor)}
+                  className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${data === valor ? 'border-marinho-800 bg-marinho-800 text-white' : 'border-marinho-100 bg-white text-marinho-700 hover:bg-marinho-50'}`}
+                >
+                  {rotuloDoHorario(iso)}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+      <p className="mt-3 text-[11px] font-bold text-slate-500">{livres.length > 0 ? 'Ou outro dia e hora' : 'Dia e hora'}</p>
+      <div className="mt-1.5 flex flex-wrap gap-2">
+        <input type="date" value={dia} min={paraCampo(new Date().toISOString()).slice(0, 10)} onChange={(e) => setData(e.target.value ? `${e.target.value}T${hora || '09:00'}` : '')} className="campo w-auto py-2" aria-label="Dia da reunião" />
+        <select value={hora} disabled={!dia} onChange={(e) => setData(`${dia}T${e.target.value}`)} className="campo w-auto py-2" aria-label="Hora da reunião">
+          {!hora && <option value="">Hora</option>}
+          {horasDoDia.map((h) => (
+            <option key={h} value={h}>
+              {horaCurta(h)}
+            </option>
+          ))}
+        </select>
         <button
           type="button"
-          disabled={!data}
+          disabled={!dia || !hora}
           onClick={() => {
             confirmarReuniao(c.id, new Date(data).toISOString(), autor, avisar)
             setRemarcando(false)
@@ -359,6 +400,19 @@ export default function FichaDoCliente({ id, abaInicial, onFechar, abrirConversa
 }
 
 /** ISO para o valor do <input type="datetime-local"> (hora do computador). */
+/** "seg 26/10, 9h" para o botao do horario livre. */
+function rotuloDoHorario(iso: string): string {
+  const d = new Date(iso)
+  const semana = d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')
+  return `${semana} ${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}, ${horaCurta(paraCampo(iso).slice(11))}`
+}
+
+/** "09:00" -> "9h"; "13:40" -> "13h40". */
+function horaCurta(h: string): string {
+  const [a, b] = h.split(':')
+  return `${Number(a)}h${b === '00' ? '' : b}`
+}
+
 function paraCampo(iso: string): string {
   const d = new Date(iso)
   const p = (n: number) => String(n).padStart(2, '0')
