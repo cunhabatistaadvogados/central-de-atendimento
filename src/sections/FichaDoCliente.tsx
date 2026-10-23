@@ -1,6 +1,6 @@
 import type { Etapa } from '@motor/robo'
 import { dinheiro, ehIdoso, horariosEntre, proximosLivres, rendaPorPessoa, SALARIO_MINIMO, temLaudo } from '@motor/robo'
-import { AlarmClock, Bot, CalendarCheck2, Check, CheckCircle2, Circle, FileSignature, MessagesSquare, Smartphone, X } from 'lucide-react'
+import { AlarmClock, Bot, CalendarCheck2, Check, CheckCircle2, Circle, FileSignature, MessagesSquare, RotateCcw, Smartphone, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Avatar, ChipEtapa, ChipOrigem, ChipPublico, PainelLateral } from '@/components/ui'
 import { conflitoDeHorario, horariosOcupados, publicos, textoDoLaudo } from '@/lib/atendimento'
@@ -33,7 +33,7 @@ const DOCS: [keyof Documentos, string][] = [
 ]
 
 function Resumo({ c, autor }: { c: Cliente; autor: string }) {
-  const { documentos, resolverPendencia, confirmarReuniao, cancelarReuniao, demonstracao, clientes } = useDados()
+  const { documentos, resolverPendencia, reabrirPendencia, confirmarReuniao, cancelarReuniao, demonstracao, clientes } = useDados()
   const f = c.robo.ficha
   const rpp = rendaPorPessoa(f)
   // Horario exato que a familia escolheu com o robo ja vem no campo.
@@ -245,9 +245,15 @@ function Resumo({ c, autor }: { c: Cliente; autor: string }) {
                     <span className={`block text-xs font-bold ${p.resolvida ? 'line-through' : ''}`}>{p.texto}</span>
                     <span className="block text-[10px] text-slate-400">retorno do robô {vencida ? `vencido ${haQuanto(p.retornoEm)}` : `em ${dataHora(p.retornoEm)}`}</span>
                   </span>
-                  {!p.resolvida && (
-                    <button type="button" onClick={() => resolverPendencia(c.id, p.id)} className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50" title="Resolvida" aria-label="Marcar como resolvida">
+                  {!p.resolvida ? (
+                    <button type="button" onClick={() => resolverPendencia(c.id, p.id)} className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50" title="Marcar como resolvida (cancela o retorno)" aria-label="Marcar como resolvida">
                       <Check className="h-4 w-4" />
+                    </button>
+                  ) : (
+                    // Clique no verde por engano (Edu, 23/10/2026): o retorno volta a valer.
+                    <button type="button" onClick={() => reabrirPendencia(c.id, p.id)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-marinho-700 hover:bg-marinho-50" title="Desfazer: o retorno volta a valer">
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      Desfazer
                     </button>
                   )}
                 </div>

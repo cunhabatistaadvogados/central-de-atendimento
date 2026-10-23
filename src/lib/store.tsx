@@ -54,6 +54,8 @@ export interface Acoes {
   salvarContrato: (id: string, contrato: Contrato) => void
   documentos: (id: string, docs: Documentos) => void
   resolverPendencia: (id: string, pendenciaId: string) => void
+  /** Desfaz o "resolvida" clicado por engano: o retorno volta a valer. */
+  reabrirPendencia: (id: string, pendenciaId: string) => void
   /** avisar: manda a data para a familia pelo WhatsApp (padrao sim). */
   confirmarReuniao: (id: string, data: string, autor: string, avisar?: boolean) => void
   /** Desfaz a confirmacao: a reuniao volta para "a confirmar" e sai do Outlook. */
@@ -111,6 +113,12 @@ function transformacoes(mudar: (cid: string, fn: (c: Cliente) => Cliente) => voi
         ...c,
         pendencias: c.pendencias.map((p) => (p.id === pid ? { ...p, resolvida: true } : p)),
         eventos: [...c.eventos, ev('equipe', `Pendência resolvida: ${c.pendencias.find((p) => p.id === pid)?.texto ?? ''}`)],
+      })),
+    reabrirPendencia: (cid: string, pid: string) =>
+      mudar(cid, (c) => ({
+        ...c,
+        pendencias: c.pendencias.map((p) => (p.id === pid ? { ...p, resolvida: false } : p)),
+        eventos: [...c.eventos, ev('equipe', `Pendência reaberta: ${c.pendencias.find((p) => p.id === pid)?.texto ?? ''}`)],
       })),
     confirmarReuniao: (cid: string, data: string, autor: string) =>
       mudar(cid, (c) => ({
