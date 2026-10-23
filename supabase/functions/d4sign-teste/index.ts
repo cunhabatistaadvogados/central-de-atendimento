@@ -4,6 +4,7 @@
 //   enviar_teste      sobe um PDF de TESTE no cofre CB&AA, cadastra UM signatario
 //                     por WhatsApp e envia (para conferir se o plano manda por WhatsApp)
 //   status            situacao de um documento
+//   reenviar          manda o link de novo ao signatario (WhatsApp ou e-mail)
 //   cancelar          cancela um documento de teste
 // Arquivo unico, sem import local: publicado pelo editor do painel.
 import { createClient } from 'npm:@supabase/supabase-js@2'
@@ -64,9 +65,12 @@ Deno.serve(async (req) => {
     // 1. sobe o PDF de teste no cofre CB&AA
     const subida = await d4(`/documents/${COFRE_CBAA}/uploadbinary`, { base64_binary_file: pdf_base64, mime_type: 'application/pdf', name: nome ?? 'TESTE Central CB&' })
     const uuid = (subida.dados as Record<string, string>)?.uuid
-    if (!uuid) return json({ ok: false, etapa: 'upload', ...subida })
-    // 2. um signatario so, com confirmacao por WhatsApp
+    if (!uuid) return json({ etapa: 'upload', ...subida, ok: false })
+    // 2. um signatario so, com confirmacao por WhatsApp. Sem e-mail, o proprio
+    // numero vai no campo email (a D4Sign grava assim) e o skipemail do
+    // signatario corta so o e-mail dele.
     const signatario: Record<string, string> = {
+      email: email || whatsapp,
       act: '1',
       foreign: '0',
       certificadoicpbr: '0',
@@ -74,12 +78,14 @@ Deno.serve(async (req) => {
       whatsapp_number: whatsapp,
       embed_methodauth: 'whats',
       embed_smsnumber: whatsapp,
+      skipemail: email ? '0' : '1',
     }
-    if (email) signatario.email = email
     const lista = await d4(`/documents/${uuid}/createlist`, { signers: [signatario] })
-    if (!lista.ok) return json({ ok: false, etapa: 'signatarios', documento: uuid, ...lista })
-    // 3. envia para assinatura
-    const envio = await d4(`/documents/${uuid}/sendtosigner`, { message: 'Teste da Central CB&: contrato de teste, sem valor.', skip_email: email ? '0' : '1', workflow: '0' })
+    if (!lista.ok) return json({ etapa: 'signatarios', documento: uuid, ...lista, ok: false })
+    // 3. envia para assinatura. skip_email '1' e para assinatura embutida no
+    // site: a D4Sign nao avisa ninguem, nem por WhatsApp (o teste de 22/10/2026
+    // foi assim e o link nao chegou). Aqui vai sempre '0'.
+    const envio = await d4(`/documents/${uuid}/sendtosigner`, { message: 'Teste da Central CB&: contrato de teste, sem valor.', skip_email: '0', workflow: '0' })
     return json({ ok: envio.ok, etapa: 'envio', documento: uuid, signatarios: lista.dados, envio: envio.dados, status: envio.status })
   }
 
@@ -88,6 +94,19 @@ Deno.serve(async (req) => {
     const r = await d4(`/documents/${documento}`)
     const sig = await d4(`/documents/${documento}/list`)
     return json({ ok: r.ok, documento: r.dados, signatarios: sig.dados })
+  }
+
+  // Reenvia o link ao signatario pelo WhatsApp (ou e-mail). A chave do
+  // signatario sai da lista do documento: basta o numero cadastrado.
+  if (acao === 'reenviar') {
+    if (!documento || !whatsapp) return json({ ok: false, erro: 'documento e whatsapp são obrigatórios' }, 400)
+    const digitos = (v: unknown) => String(v ?? '').replace(/\D/g, '')
+    const sig = await d4(`/documents/${documento}/list`)
+    const lista = (Array.isArray(sig.dados) ? sig.dados : [sig.dados]).flatMap((x: { list?: Record<string, string>[] }) => x?.list ?? [])
+    const alvo = lista.find((s: Record<string, string>) => [s.email, s.embed_smsnumber].some((v) => digitos(v) && digitos(v) === digitos(whatsapp)))
+    if (!alvo) return json({ ok: false, erro: 'signatário com esse número não encontrado no documento' }, 404)
+    const r = await d4(`/documents/${documento}/resend`, { email: alvo.email, key_signer: alvo.key_signer })
+    return json({ ok: r.ok, status: r.status, resposta: r.dados })
   }
 
   if (acao === 'cancelar') {
