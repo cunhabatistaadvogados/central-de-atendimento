@@ -85,6 +85,8 @@ export interface Contrato {
   assinadoEm?: string
   /** So no modo real: caminho do PDF assinado no bucket privado "contratos". */
   arquivo?: string
+  /** Documento na D4Sign quando o envio saiu pela Central (funcao contrato-d4sign). */
+  d4signUuid?: string
 }
 
 export interface Documentos {

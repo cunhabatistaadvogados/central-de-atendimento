@@ -64,6 +64,7 @@ interface LinhaContrato {
   enviado_em: string | null
   assinado_em: string | null
   arquivo?: string | null
+  d4sign_uuid?: string | null
 }
 
 function exigir() {
@@ -251,6 +252,7 @@ function montarClientes(
             enviadoEm: k.enviado_em ?? undefined,
             assinadoEm: k.assinado_em ?? undefined,
             arquivo: k.arquivo ?? undefined,
+            d4signUuid: k.d4sign_uuid ?? undefined,
           }
         : undefined,
       cidade: l.cidade ?? undefined,
@@ -379,6 +381,42 @@ async function chamarEnvio(corpo: Record<string, string | undefined>): Promise<v
     throw new Error(`O WhatsApp não aceitou o envio: ${motivo}`)
   }
   if (data?.error) throw new Error(`O WhatsApp não aceitou o envio: ${data.error}`)
+}
+
+/** Em que pe esta cada assinatura do contrato na D4Sign. */
+export interface SituacaoD4Sign {
+  situacao: string
+  signatarios: { quem: string; acao: string; assinou: boolean }[]
+}
+
+// Contrato pela D4Sign (funcao contrato-d4sign): o motivo real do erro vem no corpo.
+async function chamarContratoD4Sign<T>(corpo: Record<string, string>): Promise<T> {
+  const { data, error } = await exigir().functions.invoke('contrato-d4sign', { body: corpo })
+  if (error) {
+    let motivo = error.message
+    try {
+      const resposta = await (error as { context?: Response }).context?.json()
+      if (resposta?.error) motivo = resposta.error
+    } catch {
+      // sem corpo legivel: fica a mensagem generica
+    }
+    throw new Error(motivo)
+  }
+  if (data?.error) throw new Error(data.error)
+  return data as T
+}
+
+/** Sobe o .docx gerado na tela e manda para a familia assinar pelo WhatsApp. */
+export async function enviarContratoD4Sign(clienteId: string, arquivoBase64: string, nomeArquivo: string): Promise<void> {
+  await chamarContratoD4Sign({ acao: 'enviar', cliente_id: clienteId, arquivo_base64: arquivoBase64, nome_arquivo: nomeArquivo })
+}
+
+export function situacaoDoContratoD4Sign(clienteId: string): Promise<SituacaoD4Sign> {
+  return chamarContratoD4Sign<SituacaoD4Sign>({ acao: 'situacao', cliente_id: clienteId })
+}
+
+export async function reenviarContratoD4Sign(clienteId: string): Promise<void> {
+  await chamarContratoD4Sign({ acao: 'reenviar', cliente_id: clienteId })
 }
 
 /** Reuniao confirmada vai para a agenda do Dr. Andre no Outlook (funcao outlook-agenda). */

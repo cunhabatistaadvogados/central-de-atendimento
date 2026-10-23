@@ -1,10 +1,11 @@
-import { AlertTriangle, BadgeCheck, CheckCircle2, Download, FileCheck2, FileSignature, Info, Send } from 'lucide-react'
+import { primeiroNome } from '@motor/robo'
+import { AlertTriangle, BadgeCheck, CheckCircle2, Circle, Download, FileCheck2, FileSignature, Info, RefreshCw, RotateCcw, Send } from 'lucide-react'
 import { useState } from 'react'
 import { Campo, Interruptor } from '@/components/ui'
 import { rascunhoDoContrato } from '@/lib/atendimento'
 import { dataPorExtenso, faltando, gerarContratoDocx, nomeDoArquivo, segmentosClausula2, segmentosParte, signatario, type Segmento } from '@/lib/contrato'
 import { dataHora } from '@/lib/formato'
-import { linkDoContratoAssinado } from '@/lib/repositorio'
+import { linkDoContratoAssinado, reenviarContratoD4Sign, situacaoDoContratoD4Sign, type SituacaoD4Sign } from '@/lib/repositorio'
 import { useDados } from '@/lib/store'
 import type { Cliente, Contrato, DadosContrato } from '@/lib/tipos'
 
@@ -24,10 +25,15 @@ function Trecho({ segmentos }: { segmentos: Segmento[] }) {
   )
 }
 
-async function baixar(dados: DadosContrato, comParteFixa: boolean) {
+/** O .docx do contrato a partir da minuta do escritorio (o mesmo do "Baixar" e do envio). */
+async function gerarArquivo(dados: DadosContrato, comParteFixa: boolean): Promise<Uint8Array> {
   const resp = await fetch(`${import.meta.env.BASE_URL}modelos/contrato_bpc_loas.docx`)
   if (!resp.ok) throw new Error('Não encontrei a minuta do contrato no sistema.')
-  const bytes = await gerarContratoDocx(await resp.arrayBuffer(), dados, comParteFixa)
+  return gerarContratoDocx(await resp.arrayBuffer(), dados, comParteFixa)
+}
+
+async function baixar(dados: DadosContrato, comParteFixa: boolean) {
+  const bytes = await gerarArquivo(dados, comParteFixa)
   const blob = new Blob([bytes as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
@@ -36,11 +42,35 @@ async function baixar(dados: DadosContrato, comParteFixa: boolean) {
   setTimeout(() => URL.revokeObjectURL(a.href), 4000)
 }
 
-export default function EditorDeContrato({ cliente }: { cliente: Cliente }) {
-  const { salvarContrato } = useDados()
+function paraBase64(bytes: Uint8Array): string {
+  let texto = ''
+  for (let i = 0; i < bytes.length; i += 0x8000) texto += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  return btoa(texto)
+}
+
+// A familia ve o nome do arquivo na mensagem da D4Sign: nada de "padrao" ou "com_valor_fixo".
+function nomeParaAssinatura(d: DadosContrato): string {
+  const quem = (d.menor ? d.repNome : d.nome).trim()
+  return `Contrato de prestação de serviços${quem ? ` - ${quem}` : ''}.docx`
+}
+
+/** Aviso pelo nosso WhatsApp antes da mensagem da D4Sign, que vem de um número dos EUA. */
+function avisoDoContrato(nome: string): string {
+  const n = primeiroNome(nome)
+  return `${n ? `Olá, ${n}!` : 'Olá!'} O contrato vai chegar agora aqui no WhatsApp, numa mensagem da D4Sign, a plataforma de assinatura digital que o escritório usa (conta verificada, número +1 206 736-4115). É só tocar em "Visualizar documento" e assinar. Qualquer dúvida, é só chamar aqui.`
+}
+
+export default function EditorDeContrato({ cliente, autor }: { cliente: Cliente; autor: string }) {
+  const { salvarContrato, enviarParaAssinatura, responder, demonstracao } = useDados()
   const contrato: Contrato = cliente.contrato ?? rascunhoDoContrato(cliente)
   const [baixando, setBaixando] = useState(false)
   const [erro, setErro] = useState('')
+  const [aviso, setAviso] = useState('')
+  const [confirmando, setConfirmando] = useState(false)
+  const [avisarAntes, setAvisarAntes] = useState(true)
+  const [enviando, setEnviando] = useState(false)
+  const [situacao, setSituacao] = useState<SituacaoD4Sign | null>(null)
+  const [consultando, setConsultando] = useState(false)
   const d = contrato.dados
   const faltam = faltando(d)
   const sugerida = rascunhoDoContrato(cliente).comParteFixa
@@ -53,6 +83,60 @@ export default function EditorDeContrato({ cliente }: { cliente: Cliente }) {
     onChange: (e: { target: { value: string } }) => salvar({ dados: { ...d, [k]: e.target.value }, status: contrato.status === 'pronto' ? 'rascunho' : contrato.status }),
     className: 'campo',
   })
+
+  // A familia assina pelo WhatsApp (decisao do Lucas); sem WhatsApp, pelo e-mail do contrato.
+  const contato = cliente.telefone ? `WhatsApp ${cliente.telefone}` : d.email.trim() ? `e-mail ${d.email.trim()}` : ''
+  const pelaD4Sign = Boolean(contrato.d4signUuid)
+
+  async function aoEnviar() {
+    setErro('')
+    setAviso('')
+    setEnviando(true)
+    try {
+      const bytes = await gerarArquivo(d, contrato.comParteFixa)
+      let nota = ''
+      if (avisarAntes && cliente.telefone) {
+        try {
+          await responder(cliente.id, avisoDoContrato(cliente.nome), autor)
+        } catch (e) {
+          nota = ` O aviso pelo nosso WhatsApp não foi (${e instanceof Error ? e.message : 'erro'}), mas o contrato seguiu.`
+        }
+      }
+      await enviarParaAssinatura(cliente.id, { base64: paraBase64(bytes), nome: nomeParaAssinatura(d) })
+      setConfirmando(false)
+      setAviso(`Enviado. A família recebe o link ${cliente.telefone ? 'pelo WhatsApp' : 'por e-mail'}; depois o Dr. André aprova e o Lucas assina.${nota}`)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível enviar o contrato.')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  async function verSituacao() {
+    setErro('')
+    setConsultando(true)
+    try {
+      setSituacao(await situacaoDoContratoD4Sign(cliente.id))
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não consegui ver a situação na D4Sign.')
+    } finally {
+      setConsultando(false)
+    }
+  }
+
+  async function reenviarLink() {
+    setErro('')
+    setAviso('')
+    setConsultando(true)
+    try {
+      await reenviarContratoD4Sign(cliente.id)
+      setAviso('Link reenviado para a família.')
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não consegui reenviar o link.')
+    } finally {
+      setConsultando(false)
+    }
+  }
 
   async function aoBaixar() {
     setErro('')
@@ -226,6 +310,68 @@ export default function EditorDeContrato({ cliente }: { cliente: Cliente }) {
           </span>
         </label>
         {erro && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{erro}</p>}
+        {aviso && <p className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">{aviso}</p>}
+        {confirmando && (
+          <div className="space-y-3 rounded-2xl border border-marinho-900/10 bg-papel p-4">
+            <p className="text-sm font-bold text-marinho-900">Enviar para assinatura pela D4Sign</p>
+            <ol className="list-decimal space-y-1 pl-5 text-xs text-slate-600">
+              <li>
+                <b>{signatario(d) || 'A família'}</b> assina pelo {contato}
+              </li>
+              <li>
+                <b>Dr. André</b> aprova (e-mail)
+              </li>
+              <li>
+                <b>Lucas</b> assina como parte (e-mail)
+              </li>
+            </ol>
+            {cliente.telefone && (
+              <label className="flex items-start gap-2 text-xs text-slate-600">
+                <input type="checkbox" checked={avisarAntes} onChange={(e) => setAvisarAntes(e.target.checked)} className="mt-0.5 h-3.5 w-3.5 accent-marinho-800" />
+                Avisar a família antes pelo nosso WhatsApp (a mensagem da D4Sign vem de um número dos EUA e pode parecer golpe)
+              </label>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={aoEnviar} disabled={enviando} className="botao-primario">
+                <Send className="h-4 w-4" /> {enviando ? 'Enviando...' : 'Confirmar envio'}
+              </button>
+              <button type="button" onClick={() => setConfirmando(false)} disabled={enviando} className="botao-claro">
+                Voltar
+              </button>
+            </div>
+          </div>
+        )}
+        {pelaD4Sign && contrato.status === 'enviado' && !demonstracao && (
+          <div className="space-y-3 rounded-2xl border border-marinho-900/10 p-4">
+            <div>
+              <p className="text-sm font-bold text-marinho-900">Na D4Sign</p>
+              <p className="text-[11px] leading-relaxed text-slate-500">A família assina, o Dr. André aprova e o Lucas assina, nessa ordem. Quando todos terminarem, o contrato vira "Assinado" sozinho e o PDF aparece aqui.</p>
+            </div>
+            {situacao && (
+              <ul className="space-y-1.5">
+                {situacao.signatarios.map((s, i) => (
+                  <li key={i} className="flex items-center gap-2 text-xs">
+                    {s.assinou ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Circle className="h-4 w-4 text-slate-300" />}
+                    <b className="text-marinho-900">{s.quem}</b>
+                    <span className="text-slate-500">
+                      {s.acao ? `${s.acao.toLowerCase()} · ` : ''}
+                      {s.assinou ? 'feito' : 'aguardando'}
+                    </span>
+                  </li>
+                ))}
+                <li className="pt-1 text-[11px] text-slate-400">Situação na D4Sign: {situacao.situacao}</li>
+              </ul>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={verSituacao} disabled={consultando} className="botao-claro text-xs">
+                <RefreshCw className="h-3.5 w-3.5" /> Ver situação
+              </button>
+              <button type="button" onClick={reenviarLink} disabled={consultando} className="botao-claro text-xs">
+                <RotateCcw className="h-3.5 w-3.5" /> Reenviar link para a família
+              </button>
+            </div>
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           {contrato.arquivo && (
             <button
@@ -252,8 +398,8 @@ export default function EditorDeContrato({ cliente }: { cliente: Cliente }) {
           <button type="button" onClick={aoBaixar} disabled={faltam.length > 0 || baixando} className="botao-claro">
             <Download className="h-4 w-4" /> {baixando ? 'Gerando...' : 'Baixar contrato (.docx)'}
           </button>
-          {contrato.status !== 'enviado' && contrato.status !== 'assinado' && (
-            <button type="button" disabled={!contrato.okAdvogado || faltam.length > 0} onClick={() => salvar({ status: 'enviado', enviadoEm: new Date().toISOString(), geradoEm: contrato.geradoEm ?? new Date().toISOString() })} className="botao-primario">
+          {contrato.status !== 'enviado' && contrato.status !== 'assinado' && !confirmando && (
+            <button type="button" disabled={!contrato.okAdvogado || faltam.length > 0 || !contato} onClick={() => setConfirmando(true)} className="botao-primario">
               <Send className="h-4 w-4" /> Enviar para assinatura
             </button>
           )}
@@ -266,7 +412,8 @@ export default function EditorDeContrato({ cliente }: { cliente: Cliente }) {
         <p className="text-[11px] leading-relaxed text-slate-400">
           {contrato.enviadoEm && `Enviado em ${dataHora(contrato.enviadoEm)}. `}
           {contrato.assinadoEm && `Assinado em ${dataHora(contrato.assinadoEm)}. `}
-          O envio pelo D4Sign entra automático quando o plano com API for contratado; até lá, o botão registra o envio e a equipe manda o arquivo pelo próprio D4Sign.
+          {!contato && contrato.status !== 'enviado' && contrato.status !== 'assinado' && 'Para enviar, cadastre o WhatsApp da família na ficha (ou o e-mail acima). '}
+          O envio sai pela D4Sign: a família recebe o link pelo WhatsApp, depois o Dr. André aprova e o Lucas assina. "Marcar como assinado" fica para os contratos enviados fora da Central.
         </p>
       </section>
     </div>

@@ -388,7 +388,7 @@ export default function FichaDoCliente({ id, abaInicial, onFechar, abrirConversa
             <Bolhas mensagens={c.mensagens} />
           </div>
         )}
-        {aba === 'contrato' && <EditorDeContrato cliente={c} />}
+        {aba === 'contrato' && <EditorDeContrato cliente={c} autor={autor} />}
         {aba === 'historico' && (
           <ol className="relative space-y-4 border-l-2 border-ouro-200 pl-6">
             {[...c.eventos].reverse().map((e) => (

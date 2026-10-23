@@ -3,7 +3,7 @@ import { religar, type Etapa } from '@motor/robo'
 import { enviarComoEquipe, id, mensagemDaReuniao, novoCliente, rascunhoDoContrato, receberDoCliente, repetirPerguntaComoRobo } from './atendimento'
 import { baseDeDemonstracao } from './dados-demo'
 import { etapa as infoEtapa } from './escritorio'
-import { agendaOutlook, carregarClientes, carregarUmCliente, clientesMudadosDesde, enviarResposta, gravarDiferenca, repetirPerguntaPeloWhatsApp } from './repositorio'
+import { agendaOutlook, carregarClientes, carregarUmCliente, clientesMudadosDesde, enviarContratoD4Sign, enviarResposta, gravarDiferenca, repetirPerguntaPeloWhatsApp } from './repositorio'
 import { supabase } from './supabase'
 import type { Base, Cliente, Contrato, Documentos, ExtrasDoEnvio, Origem } from './tipos'
 
@@ -52,6 +52,8 @@ export interface Acoes {
   /** Conversa que nao precisa de resposta sai de "esperando a equipe" ate o cliente escrever de novo. */
   marcarResolvida: (id: string, autor: string) => void
   salvarContrato: (id: string, contrato: Contrato) => void
+  /** Contrato para assinatura: na demonstracao so muda o status; de verdade, sai pela D4Sign. */
+  enviarParaAssinatura: (id: string, arquivo: { base64: string; nome: string }) => Promise<void>
   documentos: (id: string, docs: Documentos) => void
   resolverPendencia: (id: string, pendenciaId: string) => void
   /** Desfaz o "resolvida" clicado por engano: o retorno volta a valer. */
@@ -167,6 +169,12 @@ function ProvedorDemonstracao({ children }: { children: ReactNode }) {
       receber: (cid, texto) => mudar(cid, (c) => receberDoCliente(c, texto, agora())),
       responder: async (cid, texto, autor) => mudar(cid, (c) => enviarComoEquipe(c, texto, autor, agora())),
       repetirPergunta: async (cid, autor) => mudar(cid, (c) => repetirPerguntaComoRobo(c, autor, agora())),
+      enviarParaAssinatura: async (cid) => {
+        const c = base.clientes.find((x) => x.id === cid)
+        if (!c?.contrato) return
+        const em = agora()
+        transformacoes(mudar).salvarContrato(cid, { ...c.contrato, status: 'enviado', enviadoEm: em, geradoEm: c.contrato.geradoEm ?? em })
+      },
       novoContato: (telefone, origem, primeira) => {
         const c = receberDoCliente(novoCliente(telefone, origem, agora()), primeira, agora())
         setBase((b) => ({ ...b, clientes: [c, ...b.clientes] }))
@@ -290,6 +298,17 @@ function ProvedorReal({ children }: { children: ReactNode }) {
     [recarregar],
   )
 
+  // Grava ja o que a tela ainda segura deste cliente: o envio do contrato le o
+  // banco, e a gravacao atrasada viria depois e desfaria o "enviado".
+  const gravarAgora = useCallback(async (cid: string) => {
+    const p = pendentes.current.get(cid)
+    const depois = atual.current.find((c) => c.id === cid)
+    if (!p || !depois) return
+    window.clearTimeout(p.timer)
+    pendentes.current.delete(cid)
+    await gravarDiferenca(p.antes, depois)
+  }, [])
+
   const mudar = useCallback(
     (cid: string, fn: (c: Cliente) => Cliente) => {
       const velho = atual.current.find((c) => c.id === cid)
@@ -349,6 +368,11 @@ function ProvedorReal({ children }: { children: ReactNode }) {
         await repetirPerguntaPeloWhatsApp(cid)
         atualizarUm(cid)
       },
+      enviarParaAssinatura: async (cid, arquivo) => {
+        await gravarAgora(cid)
+        await enviarContratoD4Sign(cid, arquivo.base64, arquivo.nome)
+        atualizarUm(cid)
+      },
       novoContato: () => {
         throw new Error('Contato novo chega pelo WhatsApp, não pela tela.')
       },
@@ -375,7 +399,7 @@ function ProvedorReal({ children }: { children: ReactNode }) {
       recomecarDemonstracao: () => {},
       }
     },
-    [clientes, carregando, erro, recarregar, mudar, atualizarUm, outlook, avisarFamilia],
+    [clientes, carregando, erro, recarregar, mudar, atualizarUm, outlook, avisarFamilia, gravarAgora],
   )
   return <Contexto.Provider value={acoes}>{children}</Contexto.Provider>
 }
