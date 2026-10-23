@@ -1,13 +1,15 @@
-import { ArrowLeft, Bot, CircleUser, Hand, MessageCircle, MessagesSquare, PlayCircle, RotateCcw, Search, Send, Smartphone, UserRound } from 'lucide-react'
+import { ArrowLeft, Bot, CircleUser, Hand, MessageCircle, MessagesSquare, NotebookPen, PlayCircle, RotateCcw, Search, Send, Smartphone, UserRound } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { repetirPergunta as perguntaParaRepetir } from '@motor/robo'
 import { BotaoAnexar, BotaoResponder, Citacao, FaixaDoEnvio, MidiaDaMensagem, podeCitar, previaDaMensagem, textoSemMidia, useArrastarParaResponder } from '@/components/Midia'
+import TextosPersonalizados from '@/components/TextosPersonalizados'
 import { Avatar, ChipEtapa, ChipOrigem, Vazio } from '@/components/ui'
 import { desde, esperandoEquipe } from '@/lib/atendimento'
 import { etapa as infoEtapa, RESPOSTAS_PRONTAS } from '@/lib/escritorio'
 import { dataCurta, haQuanto, hora, mesmoDia } from '@/lib/formato'
 import { EVENTO_MODO_WHATSAPP, guardarVisual, useTelaDeCelular, visualGuardado } from '@/lib/modo-whatsapp'
 import { useDados } from '@/lib/store'
+import { useTextosPersonalizados } from '@/lib/textos-personalizados'
 import type { Cliente, Mensagem } from '@/lib/tipos'
 import { ConversaWhatsApp, ListaWhatsApp, type Filtro } from '@/sections/ConversasWhatsApp'
 
@@ -115,6 +117,9 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
   const [texto, setTexto] = useState('')
   const [comoCliente, setComoCliente] = useState(false)
   const fim = useRef<HTMLDivElement>(null)
+  // Textos personalizados da equipe (23/10/2026): somam aos 4 prontos do escritorio.
+  const personalizados = useTextosPersonalizados(demonstracao, autor)
+  const [textosAbertos, setTextosAbertos] = useState(false)
 
   // Visual WhatsApp no celular: escolha lembrada no aparelho. O botao verde do
   // cabecalho (Home) liga de fora, pelo evento.
@@ -214,8 +219,22 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
     }
   }
 
+  const janelaDeTextos = (
+    <TextosPersonalizados
+      aberto={textosAbertos}
+      onFechar={() => setTextosAbertos(false)}
+      textos={personalizados.textos}
+      erro={personalizados.erro}
+      textoDaResposta={texto}
+      onUsar={setTexto}
+      salvar={personalizados.salvar}
+      apagar={personalizados.apagar}
+    />
+  )
+
   if (telaWhats) {
     return atual ? (
+      <>
       <ConversaWhatsApp
         c={atual}
         demonstracao={demonstracao}
@@ -241,7 +260,11 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
         resolver={() => marcarResolvida(atual.id, autor)}
         perguntaPendente={pendente}
         repetir={repetir}
+        personalizados={personalizados.textos}
+        abrirTextos={() => setTextosAbertos(true)}
       />
+      {janelaDeTextos}
+      </>
     ) : (
       <ListaWhatsApp
         lista={lista}
@@ -398,6 +421,20 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
                   {r.nome}
                 </button>
               ))}
+              {personalizados.textos.map((t) => (
+                <button key={t.id} type="button" onClick={() => setTexto(t.texto)} title={t.texto.slice(0, 200)} className="shrink-0 whitespace-nowrap rounded-full border border-marinho-100 bg-marinho-50 px-3 py-1 text-[11px] font-bold text-marinho-700 hover:bg-marinho-100">
+                  {t.titulo}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setTextosAbertos(true)}
+                title="Criar, editar ou copiar textos da equipe"
+                className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-dashed border-marinho-500/40 px-3 py-1 text-[11px] font-bold text-marinho-700 hover:bg-marinho-50"
+              >
+                <NotebookPen className="h-3 w-3" />
+                Textos personalizados
+              </button>
             </div>
             <FaixaDoEnvio
               respondendo={respondendo}
@@ -449,6 +486,7 @@ export default function Conversas({ foco, limparFoco, abrirCliente, autor }: { f
           <Vazio icone={<MessagesSquare className="h-6 w-6" />} titulo="Escolha uma conversa" texto="As marcadas em dourado estão esperando alguém da equipe." />
         </div>
       )}
+      {janelaDeTextos}
     </div>
   )
 }

@@ -408,3 +408,32 @@ export async function salvarGrade(grade: GradeDaAgenda, autor: string): Promise<
   const { error } = await exigir().from('agenda_config').upsert({ id: 1, grade, atualizado_em: new Date().toISOString(), atualizado_por: autor })
   if (error) throw new Error(`Não consegui salvar os horários: ${error.message}`)
 }
+
+/** Texto de copiar e colar que a equipe guarda (tabela textos_personalizados). */
+export interface TextoPersonalizado {
+  id: string
+  titulo: string
+  texto: string
+  autor: string
+  em: string
+}
+
+export async function carregarTextosPersonalizados(): Promise<TextoPersonalizado[]> {
+  const { data, error } = await exigir().from('textos_personalizados').select('*').order('titulo')
+  if (error) throw new Error(`Não consegui ler os textos personalizados: ${error.message}`)
+  return (data ?? []).map((l) => ({ id: l.id, titulo: l.titulo, texto: l.texto, autor: l.atualizado_por ?? l.criado_por ?? '', em: l.atualizado_em }))
+}
+
+/** Sem id cria; com id troca titulo e texto. */
+export async function salvarTextoPersonalizado(t: { id?: string; titulo: string; texto: string }, autor: string): Promise<void> {
+  const agora = new Date().toISOString()
+  const { error } = t.id
+    ? await exigir().from('textos_personalizados').update({ titulo: t.titulo, texto: t.texto, atualizado_por: autor, atualizado_em: agora }).eq('id', t.id)
+    : await exigir().from('textos_personalizados').insert({ titulo: t.titulo, texto: t.texto, criado_por: autor, atualizado_por: autor })
+  if (error) throw new Error(`Não consegui salvar o texto: ${error.message}`)
+}
+
+export async function apagarTextoPersonalizado(id: string): Promise<void> {
+  const { error } = await exigir().from('textos_personalizados').delete().eq('id', id)
+  if (error) throw new Error(`Não consegui apagar o texto: ${error.message}`)
+}

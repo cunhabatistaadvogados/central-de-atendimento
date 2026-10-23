@@ -1,4 +1,4 @@
-import { AlertCircle, ArrowLeft, Bot, Check, CheckCheck, ChevronDown, Hand, List as ListaIcone, MessageSquareText, MoreVertical, PlayCircle, RotateCcw, Search, Send, X } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Bot, Check, CheckCheck, ChevronDown, Hand, List as ListaIcone, MessageSquareText, MoreVertical, NotebookPen, PlayCircle, RotateCcw, Search, Send, X } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { BotaoAnexar, BotaoResponder, Citacao, FaixaDoEnvio, MidiaDaMensagem, podeCitar, previaDaMensagem, textoSemMidia, useArrastarParaResponder } from '@/components/Midia'
@@ -276,6 +276,8 @@ export function ConversaWhatsApp({
   resolver,
   perguntaPendente,
   repetir,
+  personalizados,
+  abrirTextos,
 }: {
   c: Cliente
   demonstracao: boolean
@@ -302,6 +304,9 @@ export function ConversaWhatsApp({
   /** Pergunta que o robo esta esperando; com ela aparece "Repetir pergunta do robô". */
   perguntaPendente: string | null
   repetir: () => Promise<void>
+  /** Textos personalizados da equipe: entram depois dos 4 prontos. */
+  personalizados: { id: string; titulo: string; texto: string }[]
+  abrirTextos: () => void
 }) {
   useTravarPagina()
   const [menu, setMenu] = useState(false)
@@ -521,6 +526,31 @@ export function ConversaWhatsApp({
                 {r.nome}
               </button>
             ))}
+            {personalizados.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => {
+                  setTexto(t.texto)
+                  setProntas(false)
+                  campo.current?.focus()
+                }}
+                className="shrink-0 whitespace-nowrap rounded-full bg-white px-3 py-1.5 text-[12.5px] font-semibold text-[#0b1f38] shadow-[0_1px_0.5px_rgba(11,20,26,.13)] active:bg-[#f0f2f5]"
+              >
+                {t.titulo}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                setProntas(false)
+                abrirTextos()
+              }}
+              className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-dashed border-[#008069]/50 px-3 py-1.5 text-[12.5px] font-semibold text-[#008069] active:bg-[#f0f2f5]"
+            >
+              <NotebookPen className="h-3.5 w-3.5" />
+              Textos personalizados
+            </button>
           </div>
         )}
         {erroEnvio && (
