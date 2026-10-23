@@ -42,6 +42,33 @@ function Resumo({ c, autor }: { c: Cliente; autor: string }) {
   const conflito = data ? conflitoDeHorario(clientes, new Date(data).toISOString(), c.id) : undefined
   const para = f.para === 'proprio' ? 'O(a) próprio(a)' : f.para === 'filho' ? 'Filho' : f.para === 'filha' ? 'Filha' : f.quem ? f.quem.replace(/^su[ao] /, '').replace(/^./, (x) => x.toUpperCase()) : undefined
 
+  // Horario + aviso a familia: confirmar o pedido do robo, remarcar, ou marcar
+  // do zero quando a equipe assumiu antes do robo oferecer horario (23/10/2026).
+  const escolherHorario = (rotulo: string) => (
+    <>
+      <div className="mt-3 flex gap-2">
+        <input type="datetime-local" value={data} onChange={(e) => setData(e.target.value)} className="campo py-2" />
+        <button
+          type="button"
+          disabled={!data}
+          onClick={() => {
+            confirmarReuniao(c.id, new Date(data).toISOString(), autor, avisar)
+            setRemarcando(false)
+            setData('')
+          }}
+          className="botao-primario shrink-0 py-2"
+        >
+          {rotulo}
+        </button>
+      </div>
+      {conflito && <p className="mt-2 text-[11px] font-bold text-red-600">Atenção: {conflito.nome || conflito.telefone} já tem reunião nesse horário.</p>}
+      <label className="mt-2 flex items-center gap-2 text-[11px] text-slate-600">
+        <input type="checkbox" checked={avisar} onChange={(e) => setAvisar(e.target.checked)} className="h-3.5 w-3.5 accent-marinho-800" />
+        Avisar a família pelo WhatsApp com a data e a hora
+      </label>
+    </>
+  )
+
   const caminho = [
     { nome: 'Qualificação pelo robô', ok: ['qualificado', 'reuniao', 'contrato', 'contratado'].includes(c.etapa) },
     { nome: 'Reunião com o advogado', ok: Boolean(c.reuniao?.confirmada) },
@@ -144,32 +171,7 @@ function Resumo({ c, autor }: { c: Cliente; autor: string }) {
                 {c.reuniao.confirmada && c.reuniao.data ? dataHora(c.reuniao.data) : `Pedido: ${c.reuniao.quando}`} · {c.reuniao.advogado}
               </p>
               {c.reuniao.confirmada && !demonstracao && <p className="mt-1 pl-6 text-[11px] text-emerald-700">Na agenda do Outlook do Dr. André, com a Andreia convidada.</p>}
-              {(!c.reuniao.confirmada || remarcando) && (
-                <div className="mt-3 flex gap-2">
-                  <input type="datetime-local" value={data} onChange={(e) => setData(e.target.value)} className="campo py-2" />
-                  <button
-                    type="button"
-                    disabled={!data}
-                    onClick={() => {
-                      confirmarReuniao(c.id, new Date(data).toISOString(), autor, avisar)
-                      setRemarcando(false)
-                      setData('')
-                    }}
-                    className="botao-primario shrink-0 py-2"
-                  >
-                    {remarcando ? 'Remarcar' : 'Confirmar'}
-                  </button>
-                </div>
-              )}
-              {(!c.reuniao.confirmada || remarcando) && conflito && (
-                <p className="mt-2 text-[11px] font-bold text-red-600">Atenção: {conflito.nome || conflito.telefone} já tem reunião nesse horário.</p>
-              )}
-              {(!c.reuniao.confirmada || remarcando) && (
-                <label className="mt-2 flex items-center gap-2 text-[11px] text-slate-600">
-                  <input type="checkbox" checked={avisar} onChange={(e) => setAvisar(e.target.checked)} className="h-3.5 w-3.5 accent-marinho-800" />
-                  Avisar a família pelo WhatsApp com a data e a hora
-                </label>
-              )}
+              {(!c.reuniao.confirmada || remarcando) && escolherHorario(remarcando ? 'Remarcar' : 'Confirmar')}
               {c.reuniao.confirmada && !remarcando && (
                 <div className="mt-2 flex gap-3 pl-6 text-[11px] font-bold">
                   <button type="button" onClick={() => setRemarcando(true)} className="text-marinho-700 hover:underline">
@@ -186,7 +188,10 @@ function Resumo({ c, autor }: { c: Cliente; autor: string }) {
               )}
             </div>
           ) : (
-            <p className="rounded-2xl bg-slate-50 px-3.5 py-3 text-xs text-slate-400">Sem reunião ainda. O robô oferece dois horários quando a qualificação termina.</p>
+            <div className="rounded-2xl bg-slate-50 p-3.5">
+              <p className="text-xs text-slate-500">Sem reunião ainda. O robô oferece dois horários quando a qualificação termina, ou marque aqui o horário combinado com a família.</p>
+              {escolherHorario('Marcar reunião')}
+            </div>
           )}
           <div className="mt-3 space-y-2">
             {c.pendencias.length === 0 && <p className="text-xs text-slate-400">Nenhum retorno agendado.</p>}
