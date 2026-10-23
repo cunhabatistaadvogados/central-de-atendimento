@@ -170,7 +170,8 @@ export type Sinal =
   | { tipo: 'pendencia_resolvida'; texto: string }
   | { tipo: 'etapa'; etapa: Etapa }
   | { tipo: 'reuniao'; quando: string; /** ISO do horario exato oferecido (9h, 10h...), quando houver */ em?: string }
-  | { tipo: 'duvida'; texto: string }
+  /** generica: caiu no texto padrao; o webhook confere com a IA se nao era "como assim?" */
+  | { tipo: 'duvida'; texto: string; generica?: boolean }
   | { tipo: 'encerrar'; motivo: string }
   | { tipo: 'origem'; origem?: Origem; campanha?: Campanha }
 
@@ -679,7 +680,7 @@ function extrairRenda(t: string, perguntou: boolean): number | undefined {
   return undefined
 }
 
-const PARENTES = 'mae|pai|avo|vo|marido|esposa|esposo|companheir[oa]|irmao|irma|filho|filha|sogro|sogra|tio|tia|neto|neta|padrasto|madrasta|cunhad[oa]|genro|nora'
+const PARENTES = 'mae|pai|avo|bisavo|vo|marido|esposa|esposo|companheir[oa]|irmao|irma|filho|filha|sogro|sogra|tio|tia|neto|neta|padrasto|madrasta|cunhad[oa]|genro|nora'
 
 /** Quem mora na casa, contando a lista ("eu, o pai dele e a irma") quando nao vem o numero. */
 function contarCasa(texto: string, perguntou: boolean, f: Ficha): number | undefined {
@@ -726,7 +727,7 @@ function contarCasa(texto: string, perguntou: boolean, f: Ficha): number | undef
     resto = resto.replace(/\b(meus pais|os pais|pais dele|pais dela)\b/g, ' ')
   }
   // Plural sem numero ("meus filhos"): nao da para contar, pergunta quantos.
-  if (/\b(filhos|filhas|irmaos|irmas|netos|netas|criancas|sobrinhos|avos)\b/.test(resto)) return undefined
+  if (/\b(filhos|filhas|irmaos|irmas|netos|netas|criancas|sobrinhos|avos|bisavos)\b/.test(resto)) return undefined
   const pessoas =
     resto.match(new RegExp(`\\b(eu|ele|ela|${PARENTES}|mulher|prim[oa]|sobrinh[oa]|enteado|enteada|bebe|namorad[oa]|irm[ao]zinh[oa]|irmaozinho|filhinh[oa]|netinh[oa]|nenem)\\b`, 'g')) ?? []
   n += pessoas.length
@@ -810,6 +811,10 @@ function lerBeneficioDaCasa(t: string, f: Ficha): string | undefined {
   const perto = new RegExp(`${outro}[^.;!?]{0,30}\\b(?<b>aposentad\\w*|pensao|pensionista|bpc|loas|auxilio)|\\b(?<b2>aposentadoria|pensao|bpc|loas|auxilio) (da|do|de) (minha|meu|sua|seu|o|a)?\\s*(${outrosParentes(f)})\\b`)
   const m = t.match(perto)
   if (m) return m.groups?.b ?? m.groups?.b2 ?? 'benefício'
+  // Parente sem artigo, no mesmo trecho da frase: "bisavó 1 salário mínimo de
+  // aposentada, avó 2000..." (familia da bisavo, 23/10/2026).
+  const solto = t.match(new RegExp(`\\b(${outrosParentes(f)})\\b[^.;!?,]{0,30}\\b(aposentad\\w*|pensao|pensionista|bpc|loas|auxilio)`))
+  if (solto) return solto[2]
   // "a aposentadoria dele" quando o beneficio e para ela (e o contrario).
   const doBenef = f.para === 'proprio' ? '' : f.pronome ?? (f.para === 'filha' ? 'ela' : 'ele')
   const outroPronome = doBenef === 'ela' ? 'ele' : doBenef === 'ele' ? 'ela' : '(ele|ela)'
@@ -958,7 +963,7 @@ export function lerMensagem(original: string, ficha: Ficha, pergunta: Pergunta |
     if (p !== undefined) nova.pessoasCasa = p
     const falaDeGente = p !== undefined || new RegExp(`\\b(eu|ele|ela|comigo|mora\\w*|casa|${PARENTES}|mulher)\\b`).test(t)
     if (perguntou('casa', 'casa_renda') && livre && falaDeGente) nova.casaTexto = original.trim().slice(0, 160)
-    if (/\b(genro|nora|casad[oa]|avo|avos|vo|tio|tia|prim[oa]|cunhad[oa])\b/.test(t)) anotar(NOTA_PARENTES)
+    if (/\b(genro|nora|casad[oa]|avo|avos|bisavo|bisavos|vo|tio|tia|prim[oa]|cunhad[oa])\b/.test(t)) anotar(NOTA_PARENTES)
     // Filho casado que mora com a mae idosa: a esposa dele e nora dela (F02).
     if (nova.para === 'familiar' && /\b(minha (esposa|mulher)|meu marido|sou casad[oa])\b/.test(t)) anotar(NOTA_PARENTES)
   }
@@ -1116,6 +1121,20 @@ function sobre(f: Ficha) {
 
 const PERGUNTAS_DE_SAUDE: Pergunta[] = ['diagnostico', 'laudo', 'laudo_para_preco', 'fase_medica', 'rotina', 'tratamento']
 
+/**
+ * "Quem recebe a aposentadoria?", e nao "Quem recebe?" solto: a familia da
+ * bisavo perguntou "recebe o que?" duas vezes (23/10/2026).
+ */
+function oBeneficio(citado: string | undefined): string {
+  const b = normalizar(citado ?? '')
+  if (/^aposentad/.test(b)) return 'a aposentadoria'
+  if (/^pens/.test(b)) return 'a pensão'
+  if (/auxilio.doenca/.test(b)) return 'o auxílio-doença'
+  if (/^auxilio/.test(b)) return 'o auxílio'
+  if (/^(bpc|loas)/.test(b)) return 'o BPC'
+  return 'esse benefício'
+}
+
 function textoDaPergunta(p: Pergunta, f: Ficha, agora: Date): string {
   const s = sobre(f)
   const proprio = f.para === 'proprio'
@@ -1168,7 +1187,7 @@ function textoDaPergunta(p: Pergunta, f: Ficha, agora: Date): string {
     case 'beneficio_proprio':
       return idoso ? `${s.Ele} já recebe aposentadoria, pensão ou outro benefício do INSS?` : `${s.Ele} já recebe algum benefício do INSS, como pensão ou aposentadoria?`
     case 'quem_recebe':
-      return `Quem recebe: ${s.ele} ou outra pessoa da casa?`
+      return `Quem recebe ${oBeneficio(f.beneficioCitado)}: ${s.ele} ou outra pessoa da casa?`
     case 'outros_beneficios':
       return 'Alguém da casa recebe aposentadoria, pensão ou BPC, e de quanto, mais ou menos?'
     case 'biometria':
@@ -2069,7 +2088,7 @@ function conversar(estadoAnterior: EstadoRobo, mensagem: string, agora: Date): R
       return fim()
     }
     if (d.duvida) {
-      sinais.push({ tipo: 'duvida', texto: d.duvida })
+      sinais.push({ tipo: 'duvida', texto: d.duvida, generica: d.texto === TEXTO_JURIDICO })
       estado.ficha.duvidas = [...(estado.ficha.duvidas ?? []), d.duvida]
     }
     if (prazoNovo()) return encaminhar(TEXTO_PRAZO, 'PRIORIDADE: prazo de recurso')
@@ -2277,6 +2296,8 @@ function conversar(estadoAnterior: EstadoRobo, mensagem: string, agora: Date): R
   if ((perguntaFeita === 'beneficio_proprio') && !f.beneficioProprio && QUAL_BENEFICIO.test(t)) {
     estado.ultimaPergunta = 'quem_recebe'
     estado.naoEntendeu = 0
+    // O nome do beneficio vai na pergunta: "Quem recebe a pensão: ..."
+    f.beneficioCitado ??= t.match(QUAL_BENEFICIO)?.[1]
     dizer(textoDaPergunta('quem_recebe', f, agora))
     return fim()
   }
@@ -2299,7 +2320,7 @@ function conversar(estadoAnterior: EstadoRobo, mensagem: string, agora: Date): R
   // volta. Nunca "nao entendi" nem "Combinado." (familia F08).
   if (!primeira && !aprendeuAlgo && ehPergunta(texto, t)) {
     const duvida = extrairDuvida(texto)
-    sinais.push({ tipo: 'duvida', texto: duvida })
+    sinais.push({ tipo: 'duvida', texto: duvida, generica: true })
     f.duvidas = [...(f.duvidas ?? []), duvida]
     estado.naoEntendeu = 0
     estado.ultimaPergunta = perguntaFeita

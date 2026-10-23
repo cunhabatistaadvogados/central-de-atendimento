@@ -386,8 +386,16 @@ async function rodarORobo(cliente: any, telefone: string, pendentes: Pendente[])
   // completa uma pergunta anterior, ou contornar com uma frase curta e repetir
   // a pergunta. So se nem ele entender (ou ja tiver contornado demais) fica o
   // "nao entendi". Audio e arquivo nao passam (nao ha texto).
-  if (naoEntendeu(estado, r) && !/^\[(áudio|arquivo) recebido\]$/.test(entrada)) {
-    const pergunta = await ultimaFalaDoRobo(cliente.id)
+  // Desde 23/10/2026 ele entra tambem quando as regras ACHAM que entenderam e
+  // podem travar a conversa (familia da bisavo: "como assim?" e "recebe o
+  // que?" viraram duvida juridica e o robo repetiu a mesma pergunta 3 vezes):
+  // - pergunta da familia que caiu no texto padrao de duvida (generica): ele ve
+  //   se e duvida mesmo ou se a familia nao entendeu a pergunta da Mary;
+  // - o robo ia mandar exatamente a mesma mensagem da ultima vez.
+  const pergunta = await ultimaFalaDoRobo(cliente.id)
+  const generica = r.sinais.some((s) => s.tipo === 'duvida' && s.generica)
+  const repetindo = Boolean(pergunta) && r.respostas.at(-1) === pergunta
+  if ((naoEntendeu(estado, r) || generica || repetindo) && !/^\[(áudio|arquivo) recebido\]$/.test(entrada)) {
     if (pergunta) {
       const nome = estado.ficha?.nome
       const antes = await falasRecentes(cliente.id, new Set(pendentes.map((p) => p.id)), nome, pergunta)
@@ -408,7 +416,8 @@ async function rodarORobo(cliente: any, telefone: string, pendentes: Pendente[])
       } else if (i.tipo === 'complemento') {
         feito = anotarComplemento(estado, i.resposta, em, i.ponte)
         if (feito) await evento(cliente.id, 'robo', `Intérprete: "${curta}" completa a resposta anterior: ${i.resposta}`)
-      } else if (i.tipo === 'contornar') {
+      } else if (i.tipo === 'contornar' && !(generica && i.duvida)) {
+        // Duvida de verdade que ja caiu no texto padrao: fica a resposta das regras.
         feito = contornar(estado, i.ponte, em, i.duvida || undefined)
         if (feito) await evento(cliente.id, 'robo', `Intérprete contornou "${curta}" com: "${feito.respostas[0]}"`)
       }

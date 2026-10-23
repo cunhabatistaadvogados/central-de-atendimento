@@ -319,7 +319,7 @@ caso('item 4 / C15: a propria pessoa ja recebe pensao: texto 7 e horario, nunca 
 
 caso('item 4: "tem uma pensao aqui em casa" pergunta quem recebe', () => {
   const c = conversa([...ATE_CASA, 'somos 3 e a renda é 1000', 'tem uma pensão aqui em casa'])
-  assert.equal(c.ultima, 'Quem recebe: ele ou outra pessoa da casa?')
+  assert.equal(c.ultima, 'Quem recebe a pensão: ele ou outra pessoa da casa?')
   assert.match(responder(c.estado, 'ele mesmo', SEGUNDA_10H).respostas[0], /^Como ele já recebe um benefício/)
   const outra = responder(c.estado, 'a avó dele', SEGUNDA_10H)
   assert.equal(outra.estado.ficha.beneficioProprio, 'nao')
@@ -732,7 +732,7 @@ caso('F02: "minha mae nao tem renda" nao e a renda da casa', () => {
 
 caso('F11: pensao contada sem dizer de quem: "Quem recebe?", sem perguntar de novo', () => {
   const c = conversa(['minha filha é autista e recebe pensao pq o pai faleceu', 'Cláudia, ela tem 6 anos', 'tem sim, de 2025', 'ajuda pra tudo', 'sus', 'sim', 'somos 2', 'so a pensao, 1621'])
-  assert.equal(c.ultima, 'Entendi. Quem recebe: ela ou outra pessoa da casa?')
+  assert.equal(c.ultima, 'Entendi. Quem recebe a pensão: ela ou outra pessoa da casa?')
   assert.match(responder(c.estado, 'ela mesma', SEGUNDA_10H).respostas[0], /^Como ela já recebe um benefício/)
 })
 
@@ -876,6 +876,23 @@ caso('Sabrina 23/10: "nenhuma" mandado antes da pergunta nova nao responde a ela
   assert.ok(!respostaAtrasada([{ em: '2026-10-23T12:32:32Z', texto: '5 anos' }], pergunta))
   assert.ok(!respostaAtrasada([{ em: '2026-10-23T12:32:32Z', texto: 'nenhuma' }, { em: '2026-10-23T12:32:40Z', texto: 'nenhuma' }], pergunta))
   assert.ok(!respostaAtrasada([{ em: '2026-10-23T12:32:32Z', texto: 'nenhuma' }], null))
+})
+
+caso('familia da bisavo 23/10: bisavo conta na casa, "bisavó ... aposentada" e de outra pessoa; "como assim?" vai para a IA', () => {
+  const base = ['minha filha tem autismo', 'Maria, ela tem 4 anos', 'tem laudo de 2024', 'faz terapia 4 dias na semana', 'sus', 'não temos', 'não']
+  const casa = conversa([...base, 'pai, mãe, irmã de 8 meses, tia paterna (17 anos), avó paterna e bisavó paterna'])
+  assert.equal(casa.ficha.pessoasCasa, 7)
+  const renda = conversa([...base, 'pai, mãe, irmã de 8 meses, tia paterna (17 anos), avó paterna e bisavó paterna', 'bisavó 1 salário mínimo de aposentada, avó 2000$ por mês sem registro, pai autônomo faz 1 salário mínimo e mãe desempregada'])
+  assert.equal(renda.ficha.outrosBeneficios, 'sim')
+  assert.equal(renda.ficha.beneficioCitado, undefined)
+  assert.doesNotMatch(renda.ultima, /Quem recebe/)
+  assert.match(renda.ultima, /Ela já recebe algum benefício do INSS/)
+  // Sem dono, a pergunta diz o que: "Quem recebe a aposentadoria".
+  const semDono = conversa([...base, 'eu e o pai dela', 'a renda é 1621 da aposentadoria'])
+  assert.match(semDono.tudo, /Quem recebe a aposentadoria: ela ou outra pessoa da casa\?/)
+  // "como assim?" cai no texto padrao, mas com a marca para a IA conferir.
+  const como = conversa([...base, 'eu e o pai dela', 'a renda é 1621 da aposentadoria', 'como assim?'])
+  assert.ok(como.sinais.some((s) => s.tipo === 'duvida' && s.generica))
 })
 
 console.log(`robo: ${total} conversas ok`)
