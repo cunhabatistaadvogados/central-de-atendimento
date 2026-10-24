@@ -27,8 +27,8 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 const API = 'https://secure.d4sign.com.br/api/v1'
 const COFRE_CBAA = '19eca1a8-cdec-4df9-abc0-4311b724ecce'
 // Quem aprova e quem assina pelo escritorio. A aprovacao do Dr. Andre vai
-// para o e-mail do previdenciario do escritorio (pedido do Edu, 24/10/2026;
-// antes ia para boldrincardoso.advocacia@gmail.com, como nos contratos antigos).
+// para prev@ do escritorio (pedido do Edu, 24/10/2026; antes ia para
+// boldrincardoso.advocacia@gmail.com, como nos contratos antigos).
 const DR_ANDRE = 'prev@cunhabatista.com.br'
 const ARTUR = 'artur@cunhabatista.com.br'
 const MIME_DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
