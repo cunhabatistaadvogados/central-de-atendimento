@@ -102,7 +102,7 @@ export default function EditorDeContrato({ cliente, autor }: { cliente: Cliente;
       const aviso = await enviarParaAssinatura(cliente.id, { base64: paraBase64(bytes), nome: nomeParaAssinatura(d) }, avisar && !demonstracao)
       if (aviso?.startsWith('falhou')) nota = ` O aviso pelo nosso WhatsApp não foi (${aviso.replace(/^falhou:\s*/, '')}), mas o contrato seguiu.`
       setConfirmando(false)
-      setAviso(`Enviado. A família recebe o link ${cliente.telefone ? 'pelo WhatsApp' : 'por e-mail'}; depois o Dr. André aprova e o Artur assina.${nota}`)
+      setAviso(`Enviado. A família recebe o link ${cliente.telefone ? 'pelo WhatsApp' : 'por e-mail'}; depois o Dr. André aprova e o Dr. Artur assina.${nota}`)
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível enviar o contrato.')
     } finally {
@@ -320,7 +320,7 @@ export default function EditorDeContrato({ cliente, autor }: { cliente: Cliente;
                 <b>Dr. André</b> aprova (e-mail)
               </li>
               <li>
-                <b>Artur</b> assina pelo escritório (e-mail)
+                <b>Dr. Artur</b> assina pelo escritório (e-mail)
               </li>
             </ol>
             {cliente.telefone && (
@@ -343,7 +343,7 @@ export default function EditorDeContrato({ cliente, autor }: { cliente: Cliente;
           <div className="space-y-3 rounded-2xl border border-marinho-900/10 p-4">
             <div>
               <p className="text-sm font-bold text-marinho-900">Na D4Sign</p>
-              <p className="text-[11px] leading-relaxed text-slate-500">A família assina, o Dr. André aprova e o Artur assina, nessa ordem. Quando todos terminarem, o contrato vira "Assinado" sozinho e o PDF aparece aqui.</p>
+              <p className="text-[11px] leading-relaxed text-slate-500">A família assina, o Dr. André aprova e o Dr. Artur assina, nessa ordem. Quando todos terminarem, o contrato vira "Assinado" sozinho e o PDF aparece aqui.</p>
             </div>
             {situacao && (
               <ul className="space-y-1.5">
@@ -411,7 +411,7 @@ export default function EditorDeContrato({ cliente, autor }: { cliente: Cliente;
           {contrato.enviadoEm && `Enviado em ${dataHora(contrato.enviadoEm)}. `}
           {contrato.assinadoEm && `Assinado em ${dataHora(contrato.assinadoEm)}. `}
           {!contato && contrato.status !== 'enviado' && contrato.status !== 'assinado' && 'Para enviar, cadastre o WhatsApp da família na ficha (ou o e-mail acima). '}
-          O envio sai pela D4Sign: a família recebe o link pelo WhatsApp, depois o Dr. André aprova e o Artur assina. "Marcar como assinado" fica para os contratos enviados fora da Central.
+          O envio sai pela D4Sign: a família recebe o link pelo WhatsApp, depois o Dr. André aprova e o Dr. Artur assina. "Marcar como assinado" fica para os contratos enviados fora da Central.
         </p>
       </section>
     </div>

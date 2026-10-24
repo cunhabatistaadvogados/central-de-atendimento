@@ -165,7 +165,7 @@ function listaDeSignatarios(dados: unknown): Signatario[] {
 function papel(s: Signatario, telefone: string): string {
   const email = String(s.email ?? '').toLowerCase()
   if (email === DR_ANDRE) return 'Dr. André'
-  if (email === ARTUR) return 'Artur'
+  if (email === ARTUR) return 'Dr. Artur'
   if (telefone && [s.email, s.embed_smsnumber].some((v) => digitos(v) === telefone)) return 'Família'
   return s.user_name || s.email || 'Signatário'
 }
@@ -246,7 +246,7 @@ async function avisoDaD4Sign(req: Request): Promise<Response> {
 
   if (tipo === '4') {
     const quem = papel({ email }, telefone)
-    await evento(contrato.cliente_id, 'contrato', quem === 'Dr. André' ? 'Dr. André aprovou o contrato na D4Sign.' : quem === 'Artur' ? 'Artur assinou o contrato na D4Sign.' : 'A família assinou o contrato na D4Sign.')
+    await evento(contrato.cliente_id, 'contrato', quem === 'Dr. André' ? 'Dr. André aprovou o contrato na D4Sign.' : quem === 'Dr. Artur' ? 'Dr. Artur assinou o contrato na D4Sign.' : 'A família assinou o contrato na D4Sign.')
   } else if (tipo === '1') {
     if (await confirmar('4')) await finalizar(contrato.cliente_id, uuid)
   } else if (tipo === '3') {
@@ -332,7 +332,7 @@ Deno.serve(async (req) => {
     await evento(
       cliente_id,
       'contrato',
-      `${autor} enviou o contrato pela D4Sign: a família assina ${telefone ? 'pelo WhatsApp' : 'pelo e-mail'}, depois o Dr. André aprova e o Artur assina.`,
+      `${autor} enviou o contrato pela D4Sign: a família assina ${telefone ? 'pelo WhatsApp' : 'pelo e-mail'}, depois o Dr. André aprova e o Dr. Artur assina.`,
     )
     return json({ ok: true, documento: uuid, aviso_ligado: gancho.ok, aviso })
   }
