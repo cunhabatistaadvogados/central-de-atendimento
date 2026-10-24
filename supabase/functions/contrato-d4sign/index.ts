@@ -1,7 +1,8 @@
 // Envio do contrato para assinatura pela D4Sign (23/10/2026). Regras do Lucas
 // (21/10/2026): cofre CB&AA; a familia ASSINA primeiro, com o link pelo
-// WhatsApp; depois o Dr. Andre APROVA e o Lucas ASSINA COMO PARTE, nessa
-// ordem; sem testemunhas.
+// WhatsApp; depois o Dr. Andre APROVA e o Artur ASSINA COMO PARTE pelo
+// escritorio, nessa ordem; sem testemunhas. (O Lucas assinava; desde
+// 23/10/2026 o fluxo e "Cliente X Andre como Aprovador X Artur".)
 //
 // Chamadas da tela (so a equipe; quem chama e conferido aqui dentro):
 //   enviar    {cliente_id, arquivo_base64, nome_arquivo}: sobe o .docx gerado
@@ -27,7 +28,7 @@ const API = 'https://secure.d4sign.com.br/api/v1'
 const COFRE_CBAA = '19eca1a8-cdec-4df9-abc0-4311b724ecce'
 // Quem aprova e quem assina pelo escritorio, como nos contratos de antes.
 const DR_ANDRE = 'boldrincardoso.advocacia@gmail.com'
-const LUCAS = 'lbatista@cunhabatista.com.br'
+const ARTUR = 'artur@cunhabatista.com.br'
 const MIME_DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 const ETAPAS_ANTES_DO_CONTRATO = ['novo', 'qualificacao', 'qualificado', 'reuniao']
 
@@ -102,7 +103,7 @@ function listaDeSignatarios(dados: unknown): Signatario[] {
 function papel(s: Signatario, telefone: string): string {
   const email = String(s.email ?? '').toLowerCase()
   if (email === DR_ANDRE) return 'Dr. André'
-  if (email === LUCAS) return 'Lucas'
+  if (email === ARTUR) return 'Artur'
   if (telefone && [s.email, s.embed_smsnumber].some((v) => digitos(v) === telefone)) return 'Família'
   return s.user_name || s.email || 'Signatário'
 }
@@ -183,7 +184,7 @@ async function avisoDaD4Sign(req: Request): Promise<Response> {
 
   if (tipo === '4') {
     const quem = papel({ email }, telefone)
-    await evento(contrato.cliente_id, 'contrato', quem === 'Dr. André' ? 'Dr. André aprovou o contrato na D4Sign.' : quem === 'Lucas' ? 'Lucas assinou o contrato na D4Sign.' : 'A família assinou o contrato na D4Sign.')
+    await evento(contrato.cliente_id, 'contrato', quem === 'Dr. André' ? 'Dr. André aprovou o contrato na D4Sign.' : quem === 'Artur' ? 'Artur assinou o contrato na D4Sign.' : 'A família assinou o contrato na D4Sign.')
   } else if (tipo === '1') {
     if (await confirmar('4')) await finalizar(contrato.cliente_id, uuid)
   } else if (tipo === '3') {
@@ -231,13 +232,13 @@ Deno.serve(async (req) => {
     const uuid = (subida.dados as { uuid?: string })?.uuid
     if (!uuid) return json({ error: `A D4Sign recusou o arquivo: ${motivo(subida)}` }, 502)
 
-    // 2. signatarios na ordem: familia assina, Dr. Andre aprova, Lucas assina como parte
+    // 2. signatarios na ordem: familia assina, Dr. Andre aprova, Artur assina como parte
     const base = { foreign: '0', certificadoicpbr: '0', assinatura_presencial: '0' }
     // So WhatsApp: a D4Sign grava o numero no lugar do e-mail e confirma por token no WhatsApp.
     const familia: Signatario = telefone
       ? { ...base, act: '1', whatsapp_number: `+${telefone}`, embed_methodauth: 'whats', embed_smsnumber: `+${telefone}` }
       : { ...base, act: '1', email }
-    const lista = await d4(`/documents/${uuid}/createlist`, { signers: [familia, { ...base, act: '2', email: DR_ANDRE }, { ...base, act: '4', email: LUCAS }] })
+    const lista = await d4(`/documents/${uuid}/createlist`, { signers: [familia, { ...base, act: '2', email: DR_ANDRE }, { ...base, act: '4', email: ARTUR }] })
     if (!lista.ok) {
       await d4(`/documents/${uuid}/cancel`, { comment: 'Erro ao cadastrar os signatários pela Central' })
       return json({ error: `A D4Sign não aceitou os signatários: ${motivo(lista)}` }, 502)
@@ -263,7 +264,7 @@ Deno.serve(async (req) => {
     await evento(
       cliente_id,
       'contrato',
-      `${autor} enviou o contrato pela D4Sign: a família assina ${telefone ? 'pelo WhatsApp' : 'pelo e-mail'}, depois o Dr. André aprova e o Lucas assina.`,
+      `${autor} enviou o contrato pela D4Sign: a família assina ${telefone ? 'pelo WhatsApp' : 'pelo e-mail'}, depois o Dr. André aprova e o Artur assina.`,
     )
     return json({ ok: true, documento: uuid, aviso_ligado: gancho.ok })
   }
