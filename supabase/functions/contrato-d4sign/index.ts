@@ -5,8 +5,9 @@
 // 23/10/2026 o fluxo e "Cliente X Andre como Aprovador X Artur".)
 //
 // Chamadas da tela (so a equipe; quem chama e conferido aqui dentro):
-//   enviar    {cliente_id, arquivo_base64, nome_arquivo}: sobe o .docx gerado
-//             na tela, cadastra os 3 signatarios, liga o aviso e envia
+//   enviar    {cliente_id, arquivo_base64, nome_arquivo, avisar}: sobe o .docx
+//             gerado na tela, cadastra os 3 signatarios, liga o aviso, avisa a
+//             familia pelo nosso WhatsApp (texto ou modelo "aviso_contrato") e envia
 //   situacao  {cliente_id}: em que pe esta cada assinatura (e, se ja
 //             terminou e o aviso se perdeu, marca como assinado)
 //   reenviar  {cliente_id}: manda o link de novo para o WhatsApp da familia
@@ -32,6 +33,8 @@ const COFRE_CBAA = '19eca1a8-cdec-4df9-abc0-4311b724ecce'
 const DR_ANDRE = 'prev@cunhabatista.com.br'
 const ARTUR = 'artur@cunhabatista.com.br'
 const MIME_DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+const MODELO_AVISO = 'aviso_contrato'
+const HORA = 3600000
 const ETAPAS_ANTES_DO_CONTRATO = ['novo', 'qualificacao', 'qualificado', 'reuniao']
 
 const URL_DO_PROJETO = Deno.env.get('SUPABASE_URL')!
@@ -91,6 +94,63 @@ async function evento(clienteId: string, tipo: string, texto: string) {
   await banco.from('eventos').insert({ cliente_id: clienteId, tipo, texto })
   // A tela escuta a tabela clientes (Realtime): mexer nela faz a ficha se atualizar.
   await banco.from('clientes').update({ atualizado_em: new Date().toISOString() }).eq('id', clienteId)
+}
+
+async function postarWhatsApp(para: string, conteudo: Record<string, unknown>): Promise<{ ok: boolean; wamid?: string; erro?: string }> {
+  const token = Deno.env.get('WHATSAPP_ACCESS_TOKEN')
+  const numeroId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')
+  const versao = Deno.env.get('META_GRAPH_VERSION') ?? 'v25.0'
+  if (!token || !numeroId) return { ok: false, erro: 'WHATSAPP_ACCESS_TOKEN ou WHATSAPP_PHONE_NUMBER_ID ausente nos segredos do Supabase' }
+  const resp = await fetch(`https://graph.facebook.com/${versao}/${numeroId}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messaging_product: 'whatsapp', to: para, ...conteudo }),
+  })
+  const corpo = await resp.json().catch(() => null)
+  if (!resp.ok) return { ok: false, erro: corpo?.error?.message ?? `Graph respondeu ${resp.status}` }
+  return { ok: true, wamid: corpo?.messages?.[0]?.id }
+}
+
+const primeiroNome = (nome: string) => (nome.trim().split(/\s+/)[0] ?? '').replace(/^./, (c) => c.toUpperCase())
+
+/** Mesmo texto do modelo "aviso_contrato" da Meta ({{1}} = primeiro nome). */
+function textoDoAviso(nome: string): string {
+  return `Olá, ${nome || 'tudo bem'}! O contrato do seu atendimento de BPC/LOAS vai chegar agora aqui no WhatsApp, numa mensagem da D4Sign, a plataforma de assinatura digital que o escritório usa (conta verificada, número +1 206 736-4115). É só tocar em "Visualizar documento" e assinar. Qualquer dúvida, é só chamar aqui.`
+}
+
+type ClienteDoAviso = { id: string; nome: string | null; telefone: string; ultima_do_cliente_em: string | null; robo: { pausado?: boolean } | null }
+
+/**
+ * Avisa a familia pelo nosso WhatsApp antes do link da D4Sign (que vem de um
+ * numero dos EUA e pode parecer golpe). Dentro das 24h da ultima mensagem
+ * dela vai texto livre; fora, o modelo aprovado "aviso_contrato" (pedido do
+ * Edu, 24/10/2026: antes a equipe tinha de pedir um "oi"). Falhar nao segura
+ * o contrato: a tela mostra o motivo.
+ */
+async function avisarFamilia(c: ClienteDoAviso, autor: string): Promise<string> {
+  const nome = primeiroNome(c.nome ?? '')
+  const texto = textoDoAviso(nome)
+  const ultima = c.ultima_do_cliente_em ? new Date(c.ultima_do_cliente_em).getTime() : 0
+  const naJanela = Date.now() - ultima < 24 * HORA - 10 * 60000
+  const envio = naJanela
+    ? await postarWhatsApp(c.telefone, { type: 'text', text: { body: texto, preview_url: false } })
+    : await postarWhatsApp(c.telefone, {
+        type: 'template',
+        template: { name: MODELO_AVISO, language: { code: 'pt_BR' }, components: [{ type: 'body', parameters: [{ type: 'text', text: nome || 'tudo bem' }] }] },
+      })
+  await banco.from('mensagens').insert({
+    cliente_id: c.id,
+    de: 'equipe',
+    texto,
+    autor,
+    wamid: envio.wamid ?? null,
+    status_envio: envio.ok ? 'sent' : 'failed',
+    erro_envio: envio.erro ?? null,
+  })
+  // Igual a responder pela tela: quem falou foi a equipe, o robo fica quieto.
+  if (envio.ok && !c.robo?.pausado) await banco.from('clientes').update({ robo: { ...c.robo, pausado: true, motivoPausa: `${autor} enviou o contrato` } }).eq('id', c.id)
+  await evento(c.id, 'contrato', envio.ok ? `Aviso do contrato enviado à família pelo WhatsApp (${naJanela ? 'texto' : 'modelo aprovado'}).` : `Aviso do contrato NÃO foi pelo WhatsApp: ${envio.erro}`)
+  return envio.ok ? (naJanela ? 'texto' : 'modelo') : `falhou: ${envio.erro}`
 }
 
 const digitos = (v: unknown) => String(v ?? '').replace(/\D/g, '')
@@ -212,10 +272,10 @@ Deno.serve(async (req) => {
 
   const autor = await membroDaEquipe(req)
   if (!autor) return json({ error: 'Acesso só para a equipe do escritório.' }, 403)
-  const { acao, cliente_id, arquivo_base64, nome_arquivo } = await req.json().catch(() => ({}))
+  const { acao, cliente_id, arquivo_base64, nome_arquivo, avisar } = await req.json().catch(() => ({}))
   if (!cliente_id) return json({ error: 'cliente_id é obrigatório.' }, 400)
 
-  const { data: cliente } = await banco.from('clientes').select('id, nome, telefone, etapa').eq('id', cliente_id).maybeSingle()
+  const { data: cliente } = await banco.from('clientes').select('id, nome, telefone, etapa, ultima_do_cliente_em, robo').eq('id', cliente_id).maybeSingle()
   const { data: contrato } = await banco.from('contratos').select('*').eq('cliente_id', cliente_id).maybeSingle()
   if (!cliente || !contrato) return json({ error: 'Cliente ou contrato não encontrado.' }, 404)
   const telefone = digitos(cliente.telefone)
@@ -252,7 +312,10 @@ Deno.serve(async (req) => {
     // 3. aviso de volta (assinou, finalizou, cancelou) para esta mesma funcao
     const gancho = await d4(`/documents/${uuid}/webhooks`, { url: `${URL_DO_PROJETO}/functions/v1/contrato-d4sign` })
 
-    // 4. envia seguindo a ordem
+    // 4. nosso aviso chega antes da mensagem da D4Sign (so com WhatsApp)
+    const aviso = avisar === true && telefone ? await avisarFamilia(cliente as ClienteDoAviso, autor) : null
+
+    // 5. envia seguindo a ordem
     const mensagem = 'Contrato de prestação de serviços do escritório Cunha, Batista & Advogados Associados.'
     const envio = await d4(`/documents/${uuid}/sendtosigner`, { message: mensagem, skip_email: '0', workflow: '1' })
     if (!envio.ok) return json({ error: `O contrato subiu para a D4Sign, mas o envio falhou: ${motivo(envio)}`, documento: uuid }, 502)
@@ -271,7 +334,7 @@ Deno.serve(async (req) => {
       'contrato',
       `${autor} enviou o contrato pela D4Sign: a família assina ${telefone ? 'pelo WhatsApp' : 'pelo e-mail'}, depois o Dr. André aprova e o Artur assina.`,
     )
-    return json({ ok: true, documento: uuid, aviso_ligado: gancho.ok })
+    return json({ ok: true, documento: uuid, aviso_ligado: gancho.ok, aviso })
   }
 
   if (!contrato.d4sign_uuid) return json({ error: 'Este contrato não foi enviado pela Central.' }, 409)

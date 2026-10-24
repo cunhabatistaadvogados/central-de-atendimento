@@ -53,7 +53,8 @@ export interface Acoes {
   marcarResolvida: (id: string, autor: string) => void
   salvarContrato: (id: string, contrato: Contrato) => void
   /** Contrato para assinatura: na demonstracao so muda o status; de verdade, sai pela D4Sign. */
-  enviarParaAssinatura: (id: string, arquivo: { base64: string; nome: string }) => Promise<void>
+  /** avisar: nosso aviso pelo WhatsApp antes da D4Sign. Devolve como foi o aviso (null sem aviso). */
+  enviarParaAssinatura: (id: string, arquivo: { base64: string; nome: string }, avisar: boolean) => Promise<string | null>
   documentos: (id: string, docs: Documentos) => void
   resolverPendencia: (id: string, pendenciaId: string) => void
   /** Desfaz o "resolvida" clicado por engano: o retorno volta a valer. */
@@ -171,9 +172,10 @@ function ProvedorDemonstracao({ children }: { children: ReactNode }) {
       repetirPergunta: async (cid, autor) => mudar(cid, (c) => repetirPerguntaComoRobo(c, autor, agora())),
       enviarParaAssinatura: async (cid) => {
         const c = base.clientes.find((x) => x.id === cid)
-        if (!c?.contrato) return
+        if (!c?.contrato) return null
         const em = agora()
         transformacoes(mudar).salvarContrato(cid, { ...c.contrato, status: 'enviado', enviadoEm: em, geradoEm: c.contrato.geradoEm ?? em })
+        return null
       },
       novoContato: (telefone, origem, primeira) => {
         const c = receberDoCliente(novoCliente(telefone, origem, agora()), primeira, agora())
@@ -368,10 +370,11 @@ function ProvedorReal({ children }: { children: ReactNode }) {
         await repetirPerguntaPeloWhatsApp(cid)
         atualizarUm(cid)
       },
-      enviarParaAssinatura: async (cid, arquivo) => {
+      enviarParaAssinatura: async (cid, arquivo, avisar) => {
         await gravarAgora(cid)
-        await enviarContratoD4Sign(cid, arquivo.base64, arquivo.nome)
+        const aviso = await enviarContratoD4Sign(cid, arquivo.base64, arquivo.nome, avisar)
         atualizarUm(cid)
+        return aviso
       },
       novoContato: () => {
         throw new Error('Contato novo chega pelo WhatsApp, não pela tela.')

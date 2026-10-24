@@ -57,7 +57,7 @@ function nomeParaAssinatura(d: DadosContrato): string {
 /** Aviso pelo nosso WhatsApp antes da mensagem da D4Sign, que vem de um número dos EUA. */
 function avisoDoContrato(nome: string): string {
   const n = primeiroNome(nome)
-  return `${n ? `Olá, ${n}!` : 'Olá!'} O contrato vai chegar agora aqui no WhatsApp, numa mensagem da D4Sign, a plataforma de assinatura digital que o escritório usa (conta verificada, número +1 206 736-4115). É só tocar em "Visualizar documento" e assinar. Qualquer dúvida, é só chamar aqui.`
+  return `Olá, ${n || 'tudo bem'}! O contrato do seu atendimento de BPC/LOAS vai chegar agora aqui no WhatsApp, numa mensagem da D4Sign, a plataforma de assinatura digital que o escritório usa (conta verificada, número +1 206 736-4115). É só tocar em "Visualizar documento" e assinar. Qualquer dúvida, é só chamar aqui.`
 }
 
 export default function EditorDeContrato({ cliente, autor }: { cliente: Cliente; autor: string }) {
@@ -95,14 +95,12 @@ export default function EditorDeContrato({ cliente, autor }: { cliente: Cliente;
     try {
       const bytes = await gerarArquivo(d, contrato.comParteFixa)
       let nota = ''
-      if (avisarAntes && cliente.telefone) {
-        try {
-          await responder(cliente.id, avisoDoContrato(cliente.nome), autor)
-        } catch (e) {
-          nota = ` O aviso pelo nosso WhatsApp não foi (${e instanceof Error ? e.message : 'erro'}), mas o contrato seguiu.`
-        }
-      }
-      await enviarParaAssinatura(cliente.id, { base64: paraBase64(bytes), nome: nomeParaAssinatura(d) })
+      const avisar = avisarAntes && Boolean(cliente.telefone)
+      // No real quem avisa e a funcao do contrato (texto ou, fora das 24h do
+      // WhatsApp, o modelo aprovado); na demonstracao o aviso so aparece na conversa.
+      if (avisar && demonstracao) await responder(cliente.id, avisoDoContrato(cliente.nome), autor)
+      const aviso = await enviarParaAssinatura(cliente.id, { base64: paraBase64(bytes), nome: nomeParaAssinatura(d) }, avisar && !demonstracao)
+      if (aviso?.startsWith('falhou')) nota = ` O aviso pelo nosso WhatsApp não foi (${aviso.replace(/^falhou:\s*/, '')}), mas o contrato seguiu.`
       setConfirmando(false)
       setAviso(`Enviado. A família recebe o link ${cliente.telefone ? 'pelo WhatsApp' : 'por e-mail'}; depois o Dr. André aprova e o Artur assina.${nota}`)
     } catch (e) {

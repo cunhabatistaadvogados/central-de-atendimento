@@ -390,7 +390,7 @@ export interface SituacaoD4Sign {
 }
 
 // Contrato pela D4Sign (funcao contrato-d4sign): o motivo real do erro vem no corpo.
-async function chamarContratoD4Sign<T>(corpo: Record<string, string>): Promise<T> {
+async function chamarContratoD4Sign<T>(corpo: Record<string, string | boolean>): Promise<T> {
   const { data, error } = await exigir().functions.invoke('contrato-d4sign', { body: corpo })
   if (error) {
     let motivo = error.message
@@ -406,9 +406,14 @@ async function chamarContratoD4Sign<T>(corpo: Record<string, string>): Promise<T
   return data as T
 }
 
-/** Sobe o .docx gerado na tela e manda para a familia assinar pelo WhatsApp. */
-export async function enviarContratoD4Sign(clienteId: string, arquivoBase64: string, nomeArquivo: string): Promise<void> {
-  await chamarContratoD4Sign({ acao: 'enviar', cliente_id: clienteId, arquivo_base64: arquivoBase64, nome_arquivo: nomeArquivo })
+/**
+ * Sobe o .docx gerado na tela e manda para a familia assinar pelo WhatsApp.
+ * Com avisar, a funcao manda antes o nosso aviso (texto, ou o modelo aprovado
+ * fora das 24h). Devolve como foi o aviso: 'texto', 'modelo', 'falhou: ...' ou null.
+ */
+export async function enviarContratoD4Sign(clienteId: string, arquivoBase64: string, nomeArquivo: string, avisar: boolean): Promise<string | null> {
+  const r = await chamarContratoD4Sign<{ aviso?: string | null }>({ acao: 'enviar', cliente_id: clienteId, arquivo_base64: arquivoBase64, nome_arquivo: nomeArquivo, avisar })
+  return r?.aviso ?? null
 }
 
 export function situacaoDoContratoD4Sign(clienteId: string): Promise<SituacaoD4Sign> {
