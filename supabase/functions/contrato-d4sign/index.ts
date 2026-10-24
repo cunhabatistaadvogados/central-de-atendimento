@@ -234,9 +234,12 @@ Deno.serve(async (req) => {
 
     // 2. signatarios na ordem: familia assina, Dr. Andre aprova, Artur assina como parte
     const base = { foreign: '0', certificadoicpbr: '0', assinatura_presencial: '0' }
-    // So WhatsApp: a D4Sign grava o numero no lugar do e-mail e confirma por token no WhatsApp.
+    // So WhatsApp: a D4Sign grava o numero no lugar do e-mail. Sem
+    // embed_methodauth vai a assinatura simples (nome, CPF, nascimento e
+    // rubrica), sem codigo de confirmacao: o codigo chegava no WhatsApp com o
+    // contrato aberto e confundia (Edu, 23/10/2026).
     const familia: Signatario = telefone
-      ? { ...base, act: '1', whatsapp_number: `+${telefone}`, embed_methodauth: 'whats', embed_smsnumber: `+${telefone}` }
+      ? { ...base, act: '1', whatsapp_number: `+${telefone}` }
       : { ...base, act: '1', email }
     const lista = await d4(`/documents/${uuid}/createlist`, { signers: [familia, { ...base, act: '2', email: DR_ANDRE }, { ...base, act: '4', email: ARTUR }] })
     if (!lista.ok) {
