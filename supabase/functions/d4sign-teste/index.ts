@@ -2,7 +2,8 @@
 // chave. Acoes:
 //   cofres            lista os cofres (so leitura)
 //   enviar_teste      sobe um PDF de TESTE no cofre CB&AA, cadastra UM signatario
-//                     por WhatsApp e envia (para conferir se o plano manda por WhatsApp)
+//                     por WhatsApp e envia (para conferir se o plano manda por WhatsApp);
+//                     token 'whats' ou 'sms' pede o codigo de confirmacao
 //   status            situacao de um documento
 //   reenviar          manda o link de novo ao signatario (WhatsApp ou e-mail)
 //   cancelar          cancela um documento de teste
@@ -52,7 +53,7 @@ Deno.serve(async (req) => {
   if (!ehEquipe) return json({ error: 'Acesso só para a equipe do escritório.' }, 403)
   if (!Deno.env.get('D4SIGN_TOKEN_API')) return json({ ok: false, erro: 'D4SIGN_TOKEN_API ausente nos segredos' })
 
-  const { acao = 'cofres', pdf_base64, nome, whatsapp, email, documento } = await req.json().catch(() => ({}))
+  const { acao = 'cofres', pdf_base64, nome, whatsapp, email, documento, token } = await req.json().catch(() => ({}))
 
   if (acao === 'cofres') {
     const r = await d4('/safes')
@@ -66,17 +67,19 @@ Deno.serve(async (req) => {
     const subida = await d4(`/documents/${COFRE_CBAA}/uploadbinary`, { base64_binary_file: pdf_base64, mime_type: 'application/pdf', name: nome ?? 'TESTE Central CB&' })
     const uuid = (subida.dados as Record<string, string>)?.uuid
     if (!uuid) return json({ etapa: 'upload', ...subida, ok: false })
-    // 2. um signatario so, com confirmacao por WhatsApp, igual a familia na
-    // funcao contrato-d4sign (sem e-mail, a D4Sign grava o numero no lugar).
+    // 2. um signatario so, so por WhatsApp (sem e-mail, a D4Sign grava o
+    // numero no lugar). Sem embed_methodauth vai a assinatura simples da
+    // D4Sign: nome, CPF, nascimento e rubrica. token 'whats' ou 'sms' liga o
+    // codigo de confirmacao, como a familia recebia ate 23/10/2026 (o Edu
+    // achou que confunde: o codigo chega no WhatsApp com o contrato aberto).
     const signatario: Record<string, string> = {
       act: '1',
       foreign: '0',
       certificadoicpbr: '0',
       assinatura_presencial: '0',
       whatsapp_number: whatsapp,
-      embed_methodauth: 'whats',
-      embed_smsnumber: whatsapp,
     }
+    if (token) Object.assign(signatario, { embed_methodauth: String(token), embed_smsnumber: whatsapp })
     if (email) signatario.email = email
     const lista = await d4(`/documents/${uuid}/createlist`, { signers: [signatario] })
     if (!lista.ok) return json({ etapa: 'signatarios', documento: uuid, ...lista, ok: false })
